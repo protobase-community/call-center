@@ -1,0 +1,95 @@
+# Local phone stack: a self-hosted livekit-server on the key pair from .env, LiveKit SIP, which puts
+# each phone call in a room of its own, Redis between them, the setup of the inbound trunk and its
+# dispatch rule, and the agent, which answers the rooms the dispatch rule names it for.
+# Every published port listens on 127.0.0.1 only; SIP itself stays inside the compose network.
+x-livekit-keys: &livekit-keys
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY in .env, see .env.example}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in .env, see .env.example}
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.10
+    # checks the key pair from .env and hands it to the server, which runs without dev mode, so it has
+    # no public pair and no debug pages
+    entrypoint: ["/bin/sh", "/start.sh"]
+    command: --bind 0.0.0.0 --node-ip 127.0.0.1 --udp-port 7882 --redis-host redis:6379
+    volumes:
+      - ./livekit/start.sh:/start.sh:ro
+    environment: *livekit-keys
+    # the key pair can create trunks and place SIP calls: keep the API off the network
+    ports:
+      - "127.0.0.1:7880:7880"
+      - "127.0.0.1:7881:7881"
+      - "127.0.0.1:7882:7882/udp"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7880"]
+      interval: 2s
+      retries: 15
+    # agent and sip share its network, so it must not restart because Redis came up late
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 15
+
+  agent:
+    build: .
+    # shares the server's network, so the 127.0.0.1 address it advertises reaches it from here too
+    network_mode: service:livekit
+    environment:
+      <<: *livekit-keys
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LIVEKIT_URL: ws://127.0.0.1:7880
+    depends_on:
+      - livekit
+
+  # LiveKit SIP, on livekit:5060 inside the compose network (same network as the agent, same reason)
+  sip:
+    image: livekit/sip:v1.20.0
+    network_mode: service:livekit
+    volumes:
+      - ./sip/livekit-sip.yaml:/sip/config.yaml:ro
+    environment: *livekit-keys
+    depends_on:
+      livekit:
+        condition: service_healthy
+
+  # creates or updates the inbound trunk and its dispatch rule on every start, then exits;
+  # SIP_TRUNK_FILE (in .env) picks your own trunk file, so a start never puts the dev one back
+  sip-setup:
+    build: .
+    command: [".venv/bin/python", "src/sip_setup.py", "trunk.json", "sip/dispatch-rule.json"]
+    volumes:
+      - ./sip:/app/sip:ro
+      - ${SIP_TRUNK_FILE:-./sip/inbound-trunk.json}:/app/trunk.json:ro
+    environment:
+      <<: *livekit-keys
+      LIVEKIT_URL: http://livekit:7880
+    depends_on:
+      livekit:
+        condition: service_healthy
+    restart: "no"
+
+  # tests/sip_call/run.sh: SIPp calls that check the agent refuses strangers, greets and answers
+  sip-call:
+    profiles: [test]
+    build:
+      context: .
+      dockerfile: tests/sip_call/Dockerfile
+    # tcpdump records the call; Docker grants this by default, podman does not
+    cap_add: [NET_RAW]
+    volumes:
+      - ${SIP_TRUNK_FILE:-./sip/inbound-trunk.json}:/sip-call/inbound-trunk.json:ro
+      - ./sip-call-out:/out
+    depends_on:
+      sip-setup:
+        condition: service_completed_successfully
+      sip:
+        condition: service_started
+      agent:
+        condition: service_started

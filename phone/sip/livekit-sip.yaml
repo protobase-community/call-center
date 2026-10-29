@@ -1,0 +1,11 @@
+# LiveKit SIP: takes calls on 5060 inside the compose network and joins them to rooms on livekit.
+# Its key pair comes from LIVEKIT_API_KEY and LIVEKIT_API_SECRET, which compose.yaml sets from .env.
+ws_url: ws://127.0.0.1:7880
+redis:
+  address: redis:6379
+sip_port: 5060
+# small range, enough for a few calls during development
+rtp_port: 10000-10019
+use_external_ip: false
+logging:
+  level: info
