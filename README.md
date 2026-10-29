@@ -52,10 +52,10 @@ Your first table, a list of customers for example:
   <connection string> --ui` reads the database and writes its `data.ts` and `ui.ts`, which you then adjust.
 - **Sign-in and accounts** are the `auth` of `protobase.config.ts`, on Better Auth ([Login](https://docs.protobase.net/reference/auth/)).
 - **Coding agents.** [AGENTS.md](AGENTS.md) holds the rules an assistant follows when it changes the app.
-- **Data from anywhere.** `test/locales.test.ts` checks that a first table like the customers above takes names,
+- **Data from anywhere.** `tests/locales.test.ts` checks that a first table like the customers above takes names,
   addresses, postal codes and phone numbers from many countries and scripts. Plain `f.text()` fields take them all; a
   pattern such as `/^[A-Za-z ]+$/` for names or `/^\d{5}$/` for postal codes refuses most of the world. The made-up
-  customers in `test/customers.ts` are there for your own tests.
+  customers in `tests/customers.ts` are there for your own tests.
 - Check every change with `bun run typecheck`, `bun run test`, `bun run build` and, after `bun run db:migrate`,
   `bun run doctor`, as CI does. Doctor checks the config against the database, such as the index each filterable or
   sortable field needs; Protobase Cloud runs it before it deploys.
