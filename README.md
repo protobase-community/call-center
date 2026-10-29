@@ -9,6 +9,11 @@ email address and a phone number, and their **tickets**, open, pending or solved
 A customer's page lists their tickets. Agents work customers and tickets, managers too and may delete them, and admins
 manage the accounts. A phone number is only shown: a caller is never identified by it.
 
+Each **phone call** is a live record: incoming while the AI assistant has the caller, waiting in the queue, active once
+a person is in the call, then ended. The sidebar lists the calls that have not ended, with a dot for their status, and
+the pages of a customer and a ticket list their calls. Staff read the calls and pick the ticket a call is about; the
+phone line writes the rest, and the support PIN check the verified customer.
+
 <gap>Calls cannot reach the app yet because the phone line, the voice assistant and the call screens are not implemented.</gap>
 
 ## Run it locally
@@ -43,7 +48,7 @@ You can also fork it to contribute back, or start from it with `git clone https:
 
 A new table, a list of orders for example:
 
-1. Write the migration `db/migrations/010_orders.sql`, numbered after the last one, and run `bun run db:migrate`.
+1. Write the migration `db/migrations/012_orders.sql`, numbered after the last one, and run `bun run db:migrate`.
 2. Run `bun run protobase scaffold <connection string> --ui` to write `config/orders/data.ts` and
    `config/orders/ui.ts` from the table, or write them yourself.
 3. Export them from `config/index.ts`: `export * from './orders/data'` and `export * from './orders/ui'`.
