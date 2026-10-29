@@ -16,6 +16,7 @@ const table = resource('customers')
     city: f.text().max(200).filterable(),
     postal_code: f.text().max(20).optional().filterable(),
     country: f.country().filterable(),
+    email: f.text().max(320),
     phone: f.text().max(40).filterable(),
     currency: f.currency(),
     amount: f.decimal({ precision: 14, scale: 2 }),
