@@ -81,3 +81,17 @@ describe('a phone call', () => {
     }
   })
 })
+
+describe("the phone line's account", () => {
+  it('reads phone calls, changes nothing through the API and sees no other resource', async () => {
+    const id = await insertCall('call-line', 'incoming')
+    const read = await app.request('phone_line', 'GET', `/phone_calls/${id}`)
+    expect(read.status).toBe(200)
+
+    const etag = { 'if-match': read.headers.get('etag')! }
+    expect((await app.request('phone_line', 'PATCH', `/phone_calls/${id}`, { ticket_id: null }, etag)).status).toBe(403)
+    expect((await app.request('phone_line', 'POST', '/phone_calls', { room_name: 'call-made-up', status: 'incoming' })).status).toBe(403)
+    expect((await app.request('phone_line', 'DELETE', `/phone_calls/${id}`)).status).toBe(403)
+    expect((await app.request('phone_line', 'GET', '/customers')).status).toBe(404)
+  })
+})
