@@ -14,7 +14,16 @@ a person is in the call, then ended. The sidebar lists the calls that have not e
 the pages of a customer and a ticket list their calls. Staff read the calls and pick the ticket a call is about; the
 phone line writes the rest, and the support PIN check the verified customer.
 
-<gap>Calls cannot reach the app yet because the phone line, the voice assistant and the call screens are not implemented.</gap>
+Staff join a call from its page with **Join**, at the call's own address, `/phone_calls/<id>?call=join`, as a manager
+at any time or an agent when the caller asks for a person; nobody joins a call that has ended, and whoever is in it
+leaves within the minute once it ends. The phone line joins the same call as the caller, through an account of its own
+with the `phone_line` role, which only reads the calls. The first staff member to join answers the call: it becomes
+active. A person who joins takes the call over from the assistant. The call's audio goes through a LiveKit server,
+`LIVEKIT_URL` with `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
+
+<gap>Calls cannot reach the app yet because the phone line and the voice assistant are not implemented.</gap>
+<gap>The call view cannot name the other staff members in a call because the app has no organizations, whose member list gives their names.</gap>
+<gap>The phone line cannot join calls while the sign-in policy requires two-factor authentication or passkeys because a sign-in policy exception for service accounts is not implemented in Protobase.</gap>
 
 ## Run it locally
 
@@ -26,11 +35,20 @@ bun run db:up                     # Postgres 18 in Docker on port 55432; creates
 bun run db:migrate
 bun run protobase skill install   # gives Claude Code, Codex and other agents the Protobase docs of this version
 bun run protobase users create you@example.com --role admin --generate-password
+bun run calls:up                  # LiveKit in Docker on port 7880, for the calls
 bun run dev                       # http://localhost:5173
 bun run test
 ```
 
-Set your own `PROTOBASE_SECRET` in `.env` (`openssl rand -base64 32`). `bun run db:down` stops the database.
+Set your own `PROTOBASE_SECRET` in `.env` (`openssl rand -base64 32`). `bun run db:down` stops the database and
+LiveKit.
+
+The phone line signs in with an ordinary account of the `phone_line` role and a password, and joins calls with its
+session cookie. Create it with the password on standard input:
+
+```sh
+bun run protobase users create phone-line@example.com --role phone_line --password-stdin
+```
 
 ## Use it as a template
 
