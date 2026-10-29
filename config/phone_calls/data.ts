@@ -19,6 +19,7 @@ export const phoneCalls = resource('phone_calls')
     waiting_since: f.timestamp().optional().readOnly(),
     answered_at: f.timestamp().optional().readOnly(),
     ended_at: f.timestamp().optional().readOnly(),
+    pin_failures: f.integer().readOnly(),
   })
   .primaryKey((r) => r.id)
   .live()
