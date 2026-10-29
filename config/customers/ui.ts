@@ -13,5 +13,6 @@ export const customersView = view<typeof customers>('customers')
   .layout((r) => [
     l.section('Customer', [r.name, r.customer_number, r.email, r.phone]),
     l.related('Tickets', { resource: 'tickets', field: 'customer_id', sort: 'updated_at desc' }),
+    l.related('Phone calls', { resource: 'phone_calls', field: 'customer_id', sort: 'started_at desc' }),
     l.sidebar([r.customer_number, r.phone]),
   ])

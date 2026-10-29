@@ -19,6 +19,7 @@ export const ticketsView = view<typeof tickets>('tickets')
   .layout((r) => [
     l.section('Ticket', [r.customer_id, r.subject, r.description]),
     l.section('Handling', [r.status, r.priority]),
+    l.related('Phone calls', { resource: 'phone_calls', field: 'ticket_id', sort: 'started_at desc' }),
     l.sidebar([r.status, r.priority, r.customer_id]),
     l.comments('Notes'),
   ])
