@@ -21,6 +21,13 @@ with the `phone_line` role, which only reads the calls. The first staff member t
 active. A person who joins takes the call over from the assistant. The call's audio goes through a LiveKit server,
 `LIVEKIT_URL` with `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
 
+A call reaches a customer only through their **support PIN**. Agents and managers set a customer's PIN of six digits
+(**Set support PIN** on the customer's page); only a salted scrypt hash of it is kept, which no role reads. On a call's
+page, **Verify caller** takes the customer number and PIN the caller says, and links the call to that customer only
+when both match; a wrong PIN, an unknown number and a locked PIN get the same answer. Three wrong PINs end a call's
+verification, and five on one customer within 24 hours lock their PIN, whichever calls they came from, until a manager
+chooses **Unlock support PIN**.
+
 <gap>Calls cannot reach the app yet because the phone line and the voice assistant are not implemented.</gap>
 <gap>The call view cannot name the other staff members in a call because the app has no organizations, whose member list gives their names.</gap>
 <gap>The phone line cannot join calls while the sign-in policy requires two-factor authentication or passkeys because a sign-in policy exception for service accounts is not implemented in Protobase.</gap>
