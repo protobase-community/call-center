@@ -1,0 +1,48 @@
+{
+  "name": "starter",
+  "version": "0.0.0",
+  "description": "An empty Protobase app to start from: auth, migrations and an empty config",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/protobase-community/starter.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "db:up": "test -f .env || cp .env.example .env; docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "protobase run db/migrate.ts",
+    "doctor": "protobase run db/doctor.ts",
+    "typecheck": "protobase types && tsc --noEmit",
+    "test": "protobase types && vitest run",
+    "protobase": "protobase",
+    "build": "protobase build",
+    "serve": "protobase build && protobase serve dist",
+    "dev": "protobase dev"
+  },
+  "dependencies": {
+    "better-auth": "^1.7.12",
+    "jose": "^6.2.12",
+    "kysely": "^0.29.6",
+    "pg": "^8.23.1",
+    "postgres": "^3.4.9",
+    "react": "^19.3.0"
+  },
+  "devDependencies": {
+    "@protobase/cli": "^0.57.6",
+    "@protobase/config": "^0.57.6",
+    "@protobase/layout": "^0.57.6",
+    "@protobase/schema": "^0.57.6",
+    "@protobase/server": "^0.57.6",
+    "@protobase/ui": "^0.57.6",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
+  }
+}

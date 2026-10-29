@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # The same Postgres as docker-compose.yml, on the same port, so the app's .env.example works as it is.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: protobase
+          POSTGRES_PASSWORD: protobase
+          POSTGRES_DB: scratch
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U protobase -d scratch"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: cp .env.example .env
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run build
+      - run: bun run db:migrate
+      - run: bun run doctor
