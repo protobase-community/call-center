@@ -21,6 +21,7 @@ export const phoneCallsView = view<typeof phoneCalls>('phone_calls')
     waiting_since: r.waiting_since.label('Waiting since').format('relative'),
     answered_at: r.answered_at.label('Answered').format('relative'),
     ended_at: r.ended_at.label('Ended').format('relative'),
+    pin_failures: r.pin_failures.label('Wrong PINs').help('Three end the call’s verification'),
   }))
   .list((r) => ({ columns: [r.caller_number, r.status, r.customer_id, r.ticket_id, r.started_at], sort: [[r.started_at, 'desc']] }))
   .filters((r, w) => [w.facets(r.status), w.dateRange(r.started_at, { presets: ['7d', '30d', 'month'] })])
@@ -36,7 +37,19 @@ export const phoneCallsView = view<typeof phoneCalls>('phone_calls')
   })
   .layout((r) => [
     l.custom(PhoneCallRoom),
-    l.section('Call', [r.caller_number, r.status, r.customer_id, r.verified_at, r.ticket_id]),
+    l.section('Call', [r.caller_number, r.status, r.customer_id, r.verified_at, r.pin_failures, r.ticket_id]),
     l.section('Times', [r.started_at, r.waiting_since, r.answered_at, r.ended_at]),
     l.sidebar([r.status, r.customer_id, r.ticket_id, r.room_name]),
+  ])
+  // The customer is set only by the caller's customer number and support PIN, through a function of the app
+  // (protobase.ui.tsx), never by staff picking one.
+  .actions((a) => [
+    a.action('verifyCaller', {
+      label: 'Verify caller',
+      icon: 'key',
+      inputs: (i) => [
+        i.text('customer_number', { label: 'Customer number', max: 20 }),
+        i.text('pin', { label: 'Support PIN', help: 'The six digits the caller says', max: 6 }),
+      ],
+    }),
   ])
