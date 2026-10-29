@@ -14,7 +14,8 @@
   },
   "scripts": {
     "db:up": "test -f .env || cp .env.example .env; docker compose up -d --wait",
-    "db:down": "docker compose down",
+    "db:down": "docker compose --profile calls down",
+    "calls:up": "docker compose --profile calls up -d livekit",
     "db:migrate": "protobase run db/migrate.ts",
     "doctor": "protobase run db/doctor.ts",
     "typecheck": "protobase types && tsc --noEmit",

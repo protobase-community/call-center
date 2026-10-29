@@ -19,6 +19,16 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+  # The calls' media server for development, only with the `calls` profile: `bun run calls:up` starts it. `--dev` gives
+  # it the key `devkey` and the secret `secret` that .env.example names.
+  livekit:
+    image: livekit/livekit-server:v1.13.11
+    profiles: [calls]
+    command: --dev --bind 0.0.0.0
+    ports:
+      - '7880:7880'
+      - '7881:7881'
+      - '7882:7882/udp'
 
 volumes:
   pgdata:
