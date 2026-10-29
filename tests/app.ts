@@ -8,7 +8,8 @@ import { applyMigrations } from '../db/apply-migrations'
 import { connect, databaseUrl } from '../db/connection'
 
 // The app's API over a database of its own on the Postgres of DATABASE_URL: created with the project's migrations
-// applied, and dropped again by `close`. A request signs in as the role its `x-role` header names.
+// applied, and dropped again by `close`. A request signs in as the role its `x-role` header names; `sql` writes to the
+// database directly, as the phone line does.
 
 const databaseOf = (name: string) => {
   const url = new URL(databaseUrl)
@@ -21,9 +22,8 @@ export const startApp = async () => {
   const server = connect({ max: 1 })
   await server.unsafe(`create database ${name}`)
 
-  const migrations = connect({ max: 1, database: name })
-  await applyMigrations(migrations)
-  await migrations.end()
+  const sql = connect({ max: 1, database: name })
+  await applyMigrations(sql)
 
   const pool = new pg.Pool({ connectionString: databaseOf(name) })
   const db = new Kysely<any>({ dialect: new PostgresDialect({ pool }) })
@@ -49,9 +49,10 @@ export const startApp = async () => {
 
   const close = async () => {
     await db.destroy()
+    await sql.end()
     await server.unsafe(`drop database ${name} with (force)`)
     await server.end()
   }
 
-  return { request, close }
+  return { request, sql, close }
 }
