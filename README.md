@@ -28,7 +28,7 @@ when both match; a wrong PIN, an unknown number and a locked PIN get the same an
 verification, and five on one customer within 24 hours lock their PIN, whichever calls they came from, until a manager
 chooses **Unlock support PIN**.
 
-<gap>Calls cannot reach the app yet because the phone line and the voice assistant are not implemented.</gap>
+<gap>Calls cannot reach the app yet because the phone agent's link to the app is not implemented.</gap>
 <gap>The call view cannot name the other staff members in a call because the app has no organizations, whose member list gives their names.</gap>
 <gap>The phone line cannot join calls while the sign-in policy requires two-factor authentication or passkeys because a sign-in policy exception for service accounts is not implemented in Protobase.</gap>
 
@@ -56,6 +56,34 @@ session cookie. Create it with the password on standard input:
 ```sh
 bun run protobase users create phone-line@example.com --role phone_line --password-stdin
 ```
+
+## The phone side
+
+`phone/` holds the phone side: an AI agent on [LiveKit Agents](https://docs.livekit.io/agents/) that answers each
+call, with a short greeting, through OpenAI's gpt-realtime-2.1. LiveKit SIP takes the call and puts it in a room of
+its own (`call-…`), and the dispatch rule sends the `call-center-agent` agent there. Keys the caller presses reach
+the model as a message such as `{"keypad": "42"}`, one per sequence, which ends at the pound key or after 3 seconds.
+
+`phone/sip/inbound-trunk.json` is for local development only: its password is in this repository. For a real
+trunk, write a trunk file with a long random password outside the repository and name it as `SIP_TRUNK_FILE` in
+`phone/.env`. The setup refuses a trunk without a digest username and password.
+
+Run it locally with [uv](https://docs.astral.sh/uv/) and Docker:
+
+```sh
+cd phone
+uv sync
+cp .env.example .env              # set OPENAI_API_KEY, and LIVEKIT_API_SECRET to `openssl rand -hex 32`
+docker compose up --build         # LiveKit, LiveKit SIP, Redis, the trunk's setup and the agent
+tests/sip_call/run.sh             # SIPp calls: two refused, then one the agent must greet and answer
+uv run pytest && uv run pyright && uv run ruff check src tests
+```
+
+The SIPp call costs about a cent of model use, and saves what the caller heard as `phone/sip-call-out/agent.wav`.
+Every published port listens on 127.0.0.1 only, and LiveKit runs on the key pair from `.env`, never in dev mode.
+It publishes the same LiveKit ports as `bun run calls:up`, so run `bun run db:down` first.
+
+<gap>A provider that delivers calls only to a registered phone cannot reach the agent because a SIP registration bridge is not implemented.</gap>
 
 ## Use it as a template
 
