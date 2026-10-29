@@ -1,9 +1,15 @@
-# Starter
+# Call center
 
-An empty Protobase app to build your own from: sign-in and accounts, the migration scripts, an empty
-`config/` and an empty `db/migrations/`. Add a table in a migration and its config, and Protobase gives you its API and
-its admin screens. New to Protobase? The [getting started](https://docs.protobase.net/getting-started/) guide and
-[From a table to an admin](https://docs.protobase.net/guides/table-to-admin/) walk through it.
+An example of an AI call center built with Protobase: people call a number and an AI voice assistant answers, or they
+wait in a queue with hold music, while staff see the incoming, waiting and active calls, join any of them, verify the
+caller with a support PIN and work the caller's ticket and customer record.
+
+This part is the app the staff work in: **customers**, each with the customer number a caller keys on the phone, an
+email address and a phone number, and their **tickets**, open, pending or solved, with comments for the staff's notes.
+A customer's page lists their tickets. Agents work customers and tickets, managers too and may delete them, and admins
+manage the accounts. A phone number is only shown: a caller is never identified by it.
+
+<gap>Calls cannot reach the app yet because the phone line, the voice assistant and the call screens are not implemented.</gap>
 
 ## Run it locally
 
@@ -35,12 +41,12 @@ You can also fork it to contribute back, or start from it with `git clone https:
 
 ## Customise it
 
-Your first table, a list of customers for example:
+A new table, a list of orders for example:
 
-1. Write the migration `db/migrations/007_customers.sql`, numbered after the auth migrations, and run `bun run db:migrate`.
-2. Run `bun run protobase scaffold <connection string> --ui` to write `config/customers/data.ts` and
-   `config/customers/ui.ts` from the table, or write them yourself.
-3. Export them from `config/index.ts`: `export * from './customers/data'` and `export * from './customers/ui'`.
+1. Write the migration `db/migrations/010_orders.sql`, numbered after the last one, and run `bun run db:migrate`.
+2. Run `bun run protobase scaffold <connection string> --ui` to write `config/orders/data.ts` and
+   `config/orders/ui.ts` from the table, or write them yourself.
+3. Export them from `config/index.ts`: `export * from './orders/data'` and `export * from './orders/ui'`.
 4. `bun run dev` shows the new list and record page.
 
 - **Tables and screens.** Each table's data config is in `config/<name>/data.ts` (fields, validation, who may read
@@ -52,10 +58,11 @@ Your first table, a list of customers for example:
   <connection string> --ui` reads the database and writes its `data.ts` and `ui.ts`, which you then adjust.
 - **Sign-in and accounts** are the `auth` of `protobase.config.ts`, on Better Auth ([Login](https://docs.protobase.net/reference/auth/)).
 - **Coding agents.** [AGENTS.md](AGENTS.md) holds the rules an assistant follows when it changes the app.
-- **Data from anywhere.** `tests/locales.test.ts` checks that a first table like the customers above takes names,
+- **Data from anywhere.** `tests/locales.test.ts` checks that a table like the customers takes names,
   addresses, postal codes and phone numbers from many countries and scripts. Plain `f.text()` fields take them all; a
   pattern such as `/^[A-Za-z ]+$/` for names or `/^\d{5}$/` for postal codes refuses most of the world. The made-up
-  customers in `tests/customers.ts` are there for your own tests.
+  customers in `tests/customers.ts` are there for your own tests;
+  `tests/customers-tickets.test.ts` keeps each of them through the app's API, on a Postgres database of its own.
 - Check every change with `bun run typecheck`, `bun run test`, `bun run build` and, after `bun run db:migrate`,
   `bun run doctor`, as CI does. Doctor checks the config against the database, such as the index each filterable or
   sortable field needs; Protobase Cloud runs it before it deploys.
@@ -72,7 +79,7 @@ GitHub repository**. Protobase keeps the app in sync with the repository and dep
 `config/<name>/data.ts` and its screens in `config/<name>/ui.ts`, all exported from `config/index.ts`, and
 `protobase dev` and `protobase serve` serve the API and the app from them.
 
-- Tested with Protobase **0.57.6**, and CI runs against it. The app is bundled: the `@protobase/*` packages are dev
+- Tested with Protobase **0.62.2**, and CI runs against it. The app is bundled: the `@protobase/*` packages are dev
   dependencies in the caret range of that release, and dev, the build and the `db:*` scripts (`protobase run`) use the
   CLI's own copies, so a newer CLI within the range updates the app with no change to its files. `tsconfig.json`
   extends the `.protobase/tsconfig.json` that `protobase types` writes, so the editor types the CLI's copies too. A
@@ -82,12 +89,7 @@ GitHub repository**. Protobase keeps the app in sync with the repository and dep
   [Versioning](https://docs.protobase.net/reference/versioning/) says how bundled and locked apps differ.
 - Docs: [docs.protobase.net](https://docs.protobase.net). Source and issues: [PrototeamHQ/protobase](https://github.com/PrototeamHQ/protobase).
 - This app started as an example in Protobase's repository; its history came with it.
-- The same app is the `scratch` preset that new Protobase apps can start from ([`@protobase/presets`](https://github.com/PrototeamHQ/protobase/tree/main/packages/presets)).
-
-## Notes
-
-It has no resources, so `protobase doctor` refuses it until the first change adds one; `bun run doctor` passes with
-nothing to check until then.
+- It started as the `scratch` preset that new Protobase apps can start from ([`@protobase/presets`](https://github.com/PrototeamHQ/protobase/tree/main/packages/presets)).
 
 ## Contributing
 
