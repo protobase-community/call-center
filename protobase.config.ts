@@ -5,7 +5,7 @@ import { defineConfig } from '@protobase/config'
 export default defineConfig({
   auth: {
     // No defaultRole on purpose: every account is created with an explicit role (`protobase users create --role`).
-    roles: ['admin'],
+    roles: ['admin', 'agent', 'manager'],
   },
   // Every user works in tenant 1, which access rules can compare with an organization_id column.
   authenticate: { tenant: 1 },
