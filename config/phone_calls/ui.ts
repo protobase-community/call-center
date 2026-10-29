@@ -1,5 +1,9 @@
+import { component } from '@protobase/layout'
 import { l, view } from '@protobase/schema'
 import type { phoneCalls } from './data'
+
+/** The call on the record, drawn by the `PhoneCallRoom` export of protobase.ui.tsx. */
+export const PhoneCallRoom = component('PhoneCallRoom')
 
 const statusLabels = { incoming: 'Incoming', waiting: 'Waiting', active: 'Active', ended: 'Ended' }
 
@@ -31,6 +35,7 @@ export const phoneCallsView = view<typeof phoneCalls>('phone_calls')
     },
   })
   .layout((r) => [
+    l.custom(PhoneCallRoom),
     l.section('Call', [r.caller_number, r.status, r.customer_id, r.verified_at, r.ticket_id]),
     l.section('Times', [r.started_at, r.waiting_since, r.answered_at, r.ended_at]),
     l.sidebar([r.status, r.customer_id, r.ticket_id, r.room_name]),
