@@ -33,10 +33,10 @@ describe('joining a phone call', () => {
   it('admits an agent, a manager and the phone line, and refuses anyone else', async () => {
     const id = await insertCall('call-roles', 'incoming')
     for (const role of ['agent', 'manager', 'phone_line']) {
-      expect((await app.invoke(role, phoneCallSocketPath(id))).status).toBe(admitted)
+      expect((await app.open(role, phoneCallSocketPath(id))).status).toBe(admitted)
     }
     for (const role of ['admin', 'customer']) {
-      const response = await app.invoke(role, phoneCallSocketPath(id))
+      const response = await app.open(role, phoneCallSocketPath(id))
       expect(response.status).toBe(403)
       expect(await response.json()).toMatchObject({ type: expect.stringContaining('function-forbidden') })
     }
@@ -45,7 +45,7 @@ describe('joining a phone call', () => {
   it('is refused once the call has ended', async () => {
     const id = await insertCall('call-ended', 'ended')
     for (const role of ['agent', 'phone_line']) {
-      const response = await app.invoke(role, phoneCallSocketPath(id))
+      const response = await app.open(role, phoneCallSocketPath(id))
       expect(response.status).toBe(403)
       expect(await response.json()).toMatchObject({ type: expect.stringContaining('call-ended') })
     }
@@ -53,14 +53,14 @@ describe('joining a phone call', () => {
 
   it('makes the call active when the first staff member joins, and not when the phone line does', async () => {
     const id = await insertCall('call-answered', 'waiting')
-    expect((await app.invoke('phone_line', phoneCallSocketPath(id))).status).toBe(admitted)
+    expect((await app.open('phone_line', phoneCallSocketPath(id))).status).toBe(admitted)
     expect(await readCall(id)).toMatchObject({ status: 'waiting', answered_at: null })
 
-    expect((await app.invoke('agent', phoneCallSocketPath(id))).status).toBe(admitted)
+    expect((await app.open('agent', phoneCallSocketPath(id))).status).toBe(admitted)
     const answered = await readCall(id)
     expect(answered).toMatchObject({ status: 'active', answered_at: expect.any(Date) })
 
-    expect((await app.invoke('manager', phoneCallSocketPath(id))).status).toBe(admitted)
+    expect((await app.open('manager', phoneCallSocketPath(id))).status).toBe(admitted)
     expect(await readCall(id)).toEqual(answered)
   })
 })
