@@ -90,7 +90,7 @@
     </action>
   </nop>
   <pause milliseconds="18000"/>
-  <!-- the customer number, then a wrong PIN: the agent offers to try again and asks anew -->
+  <!-- the customer number, then a wrong PIN: the agent offers to try again -->
   <nop>
     <action>
       <exec play_dtmf="100001#"/>
@@ -102,7 +102,14 @@
       <exec play_dtmf="111111#"/>
     </action>
   </nop>
-  <pause milliseconds="16000"/>
+  <pause milliseconds="9000"/>
+  <!-- agrees to try again, in case the agent offered it rather than asked anew -->
+  <nop>
+    <action>
+      <exec rtp_stream="/sip-call/retry.al,1,8"/>
+    </action>
+  </nop>
+  <pause milliseconds="9000"/>
   <!-- the customer number and the right PIN -->
   <nop>
     <action>
