@@ -12,7 +12,8 @@ from caller_info import CallerInfo
 from hold_queue import HoldQueue
 from tool_result import tool_result
 
-_DESCRIPTION = """Put the caller in the queue for a person when they ask for one. Tell them in one
+_DESCRIPTION = """Put the caller in the queue for a person when they ask for one; they need no
+verification first. Tell them in one
 short sentence that you are finding someone, in the same reply, then call this tool. They hear
 hold music until a person joins; you hear nothing meanwhile."""
 
