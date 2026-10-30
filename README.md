@@ -44,7 +44,6 @@ whose every request is signed by the [Standard Webhooks](https://www.standardweb
 The customer and ticket routes answer 404 while the call is not verified, and they and the verify route 409 once
 the call has ended. A call is verified as one customer and is about one ticket: a second is a 409.
 
-<gap>Calls cannot reach the app yet because the phone agent's link to the app is not implemented.</gap>
 <gap>The call view cannot name the other staff members in a call because the app has no organizations, whose member list gives their names.</gap>
 <gap>The phone line cannot join calls while the sign-in policy requires two-factor authentication or passkeys because a sign-in policy exception for service accounts is not implemented in Protobase.</gap>
 
@@ -76,9 +75,18 @@ bun run protobase users create phone-line@example.com --role phone_line --passwo
 ## The phone side
 
 `phone/` holds the phone side: an AI agent on [LiveKit Agents](https://docs.livekit.io/agents/) that answers each
-call, with a short greeting, through OpenAI's gpt-realtime-2.1. LiveKit SIP takes the call and puts it in a room of
-its own (`call-…`), and the dispatch rule sends the `call-center-agent` agent there. Keys the caller presses reach
-the model as a message such as `{"keypad": "42"}`, one per sequence, which ends at the pound key or after 3 seconds.
+call through OpenAI's gpt-realtime-2.1. LiveKit SIP takes the call and puts it in a room of its own (`call-…`), and
+the dispatch rule sends the `call-center-agent` agent there. Keys the caller presses reach the model as a message
+such as `{"keypad": "42"}`, one per sequence, which ends at the pound key or after 3 seconds.
+
+The agent works for the app through its phone line: `CALL_CENTER_URL` names the `phone-line` function, such as
+`https://example.com/api/functions/phone-line`, and `CALL_CENTER_SECRET` is the app's `PHONE_LINE_SECRET`. Both are
+required, and the agent does not start with one missing or malformed; plain http is taken only on the same machine.
+It registers each call with the caller's number, and reports it ended when the caller hangs up or the agent does.
+Before anything about an account, the agent puts the keypad in PIN entry: the caller's next two sequences, the
+customer number and the PIN, go straight to the app's check, never to the model, a log or the transcript, and the
+model hears only `{"verified": true}`, `false` or `"locked"`. Once the caller is verified, it reads their name and
+open tickets and opens a new ticket for them; before that, these tools refuse.
 
 `phone/sip/inbound-trunk.json` is for local development only: its password is in this repository. For a real
 trunk, write a trunk file with a long random password outside the repository and name it as `SIP_TRUNK_FILE` in
@@ -91,14 +99,18 @@ cd phone
 uv sync
 cp .env.example .env              # set OPENAI_API_KEY, and LIVEKIT_API_SECRET to `openssl rand -hex 32`
 docker compose up --build         # LiveKit, LiveKit SIP, Redis, the trunk's setup and the agent
-tests/sip_call/run.sh             # SIPp calls: two refused, then one the agent must greet and answer
+tests/sip_call/run.sh             # SIPp calls: two refused, one the agent must greet and answer, one with a PIN
 uv run pytest && uv run pyright && uv run ruff check src tests
 ```
 
-The SIPp call costs about a cent of model use, and saves what the caller heard as `phone/sip-call-out/agent.wav`.
+The SIPp calls cost a few cents of model use. The first saves what the caller heard as
+`phone/sip-call-out/agent.wav`. The second keys a wrong, then the right PIN and asks for a ticket, against a stand-in
+of the app's phone line that checks signatures as the app does and logs what it answered to
+`phone/sip-call-out/phone-line.jsonl`; `run.sh` points the agent at it with a secret of its own.
 Every published port listens on 127.0.0.1 only, and LiveKit runs on the key pair from `.env`, never in dev mode.
 It publishes the same LiveKit ports as `bun run calls:up`, so run `bun run db:down` first.
 
+<gap>The local phone stack cannot call an app run with `bun run dev` because the agent takes plain http only on its own machine and a local https route to the app is not implemented.</gap>
 <gap>A provider that delivers calls only to a registered phone cannot reach the agent because a SIP registration bridge is not implemented.</gap>
 
 ## Use it as a template
