@@ -71,6 +71,9 @@ export const startApp = async ({ functions = {} }: { functions?: Record<string, 
   /** A GET of the app's function at `path`, such as `/api/functions/phone-call?phone_call=1`. */
   const open = (role: string, path: string) => call(role, 'GET', path)
 
+  /** A request to the app as it comes, with no role: as the phone line sends its signed ones. */
+  const send = (path: string, init: RequestInit) => admin.request(path, init)
+
   const close = async () => {
     await db.destroy()
     await sql.end()
@@ -78,5 +81,5 @@ export const startApp = async ({ functions = {} }: { functions?: Record<string, 
     await server.end()
   }
 
-  return { request, invoke, open, sql, db, close }
+  return { request, invoke, open, send, sql, db, close }
 }
