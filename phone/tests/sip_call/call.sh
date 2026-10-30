@@ -1,7 +1,7 @@
 #!/bin/sh
-# Inside the sip-call container: two refused calls, one call the agent must greet and answer, and
-# one that keys a wrong then a right PIN and asks for a ticket, checked by what the stand-in of the
-# app's phone line answered. SIP_TARGET is LiveKit SIP's address, CAPTURE_INTERFACE the one tcpdump
+# Inside the sip-call container: two refused calls, one call the agent must greet and answer, one
+# that keys a wrong then a right PIN and asks for a ticket, checked by what the stand-in of the
+# app's phone line answered, and one that asks for a person and must hear hold music while waiting. SIP_TARGET is LiveKit SIP's address, CAPTURE_INTERFACE the one tcpdump
 # records on. Writes the SIPp logs, the recorded call and agent.wav to /out.
 set -u
 
@@ -51,4 +51,10 @@ pin_called=$?
 python3 check_pin_call.py /out/phone-line.jsonl
 pin_checked=$?
 
-[ "$called" -eq 0 ] && [ "$checked" -eq 0 ] && [ "$pin_called" -eq 0 ] && [ "$pin_checked" -eq 0 ]
+record /out/person-call.pcap "$target" person-call -au "$username" -ap "$password"
+person_called=$?
+python3 check_person_call.py /out/person-call.pcap "$media_port" /out/phone-line.jsonl /out
+person_checked=$?
+
+[ "$called" -eq 0 ] && [ "$checked" -eq 0 ] && [ "$pin_called" -eq 0 ] && [ "$pin_checked" -eq 0 ] \
+  && [ "$person_called" -eq 0 ] && [ "$person_checked" -eq 0 ]

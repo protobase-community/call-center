@@ -100,7 +100,7 @@ services:
         condition: service_healthy
 
   # tests/sip_call/run.sh: SIPp calls that check the agent refuses strangers, greets and answers,
-  # and verifies a caller by keypad and opens their ticket
+  # verifies a caller by keypad and opens their ticket, and puts a caller on hold with music
   sip-call:
     profiles: [test]
     build:

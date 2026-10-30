@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Places SIPp calls into the local stack and checks the agent greets and answers a spoken question,
-# then verifies a caller by keypad, a wrong PIN first, and opens their ticket.
+# then verifies a caller by keypad, a wrong PIN first, and opens their ticket, and puts a caller who
+# asks for a person on hold with music.
 # usage: phone/tests/sip_call/run.sh   (needs the model's key in phone/.env)
 # Leaves the stack running; the agent's side of the first call is in phone/sip-call-out/agent.wav,
+# of the call that asks for a person in phone/sip-call-out/person-agent.wav,
 # and what the stand-in of the app's phone line answered in phone/sip-call-out/phone-line.jsonl.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
