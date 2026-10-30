@@ -88,6 +88,15 @@ customer number and the PIN, go straight to the app's check, never to the model,
 model hears only `{"verified": true}`, `false` or `"locked"`. Once the caller is verified, it reads their name and
 open tickets and opens a new ticket for them; before that, these tools refuse.
 
+A caller who asks for a person waits in the queue: the agent says it is finding someone, sets the call `waiting`, so
+staff see it among the waiting calls, stops listening and plays hold music in the caller's own room, looped through
+LiveKit Agents' `BackgroundAudioPlayer`. Keys pressed meanwhile are ignored, unless PIN entry is on. The wait ends when
+the caller hangs up or after `MAX_WAIT_MINUTES` (5 when unset): then the music stops and the agent offers to open a
+ticket instead, or puts the caller back in the queue. The music is `phone/hold_music/hold-music.ogg`, self-made and
+public domain (CC0), see its README; `HOLD_MUSIC_FILE` names another file.
+<gap>A person who joins a waiting call cannot stop the hold music because the phone line does not yet watch for staff joining the room.</gap>
+<gap>A caller who takes a ticket after the longest wait stays waiting in the app because the phone line has no route that takes a call back from the queue.</gap>
+
 `phone/sip/inbound-trunk.json` is for local development only: its password is in this repository. For a real
 trunk, write a trunk file with a long random password outside the repository and name it as `SIP_TRUNK_FILE` in
 `phone/.env`. The setup refuses a trunk without a digest username and password.
@@ -99,14 +108,17 @@ cd phone
 uv sync
 cp .env.example .env              # set OPENAI_API_KEY, and LIVEKIT_API_SECRET to `openssl rand -hex 32`
 docker compose up --build         # LiveKit, LiveKit SIP, Redis, the trunk's setup and the agent
-tests/sip_call/run.sh             # SIPp calls: two refused, one the agent must greet and answer, one with a PIN
+tests/sip_call/run.sh             # SIPp calls: two refused, one the agent must greet and answer, one with a PIN,
+                                  # one that asks for a person
 uv run pytest && uv run pyright && uv run ruff check src tests
 ```
 
 The SIPp calls cost a few cents of model use. The first saves what the caller heard as
 `phone/sip-call-out/agent.wav`. The second keys a wrong, then the right PIN and asks for a ticket, against a stand-in
 of the app's phone line that checks signatures as the app does and logs what it answered to
-`phone/sip-call-out/phone-line.jsonl`; `run.sh` points the agent at it with a secret of its own.
+`phone/sip-call-out/phone-line.jsonl`; `run.sh` points the agent at it with a secret of its own. The third asks for
+a person and must hear the hold music without a pause from 12 to 27 seconds after its request, and see the stand-in set
+the call `waiting`; the agent's side is in `phone/sip-call-out/person-agent.wav`.
 Every published port listens on 127.0.0.1 only, and LiveKit runs on the key pair from `.env`, never in dev mode.
 It publishes the same LiveKit ports as `bun run calls:up`, so run `bun run db:down` first.
 
