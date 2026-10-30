@@ -44,6 +44,9 @@ services:
     environment:
       <<: *livekit-keys
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # checked by the agent at its start, which names a missing or malformed one
+      CALL_CENTER_URL: ${CALL_CENTER_URL:-}
+      CALL_CENTER_SECRET: ${CALL_CENTER_SECRET:-}
       LIVEKIT_URL: ws://127.0.0.1:7880
     depends_on:
       - livekit
@@ -75,7 +78,25 @@ services:
         condition: service_healthy
     restart: "no"
 
-  # tests/sip_call/run.sh: SIPp calls that check the agent refuses strangers, greets and answers
+  # tests/sip_call/run.sh: a stand-in of the app's phone line on 127.0.0.1:8090 of the agent's
+  # network, with the secret run.sh sets; it logs each request to sip-call-out/phone-line.jsonl
+  phone-line-stand-in:
+    profiles: [test]
+    build:
+      context: .
+      dockerfile: tests/sip_call/Dockerfile
+    network_mode: service:livekit
+    command: ["python3", "stand_in_server.py", "8090", "/out/phone-line.jsonl"]
+    environment:
+      CALL_CENTER_SECRET: ${CALL_CENTER_SECRET:-}
+    volumes:
+      - ./sip-call-out:/out
+    depends_on:
+      livekit:
+        condition: service_healthy
+
+  # tests/sip_call/run.sh: SIPp calls that check the agent refuses strangers, greets and answers,
+  # and verifies a caller by keypad and opens their ticket
   sip-call:
     profiles: [test]
     build:
@@ -92,4 +113,6 @@ services:
       sip:
         condition: service_started
       agent:
+        condition: service_started
+      phone-line-stand-in:
         condition: service_started
