@@ -7,6 +7,7 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src ./src
+COPY hold_music/hold-music.ogg ./hold_music/
 
 # the agent handles untrusted audio and runs tools: it runs unprivileged
 RUN useradd --system --uid 10001 --no-create-home app
