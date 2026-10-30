@@ -53,6 +53,10 @@ class CallCenter:
         )
         return call["id"]
 
+    async def wait_in_queue(self, call_id: int) -> None:
+        """The call waits for a person; again while it waits keeps the time it started waiting."""
+        await self._request("POST", f"/calls/{call_id}/status", {"status": "waiting"})
+
     async def end_call(self, call_id: int) -> None:
         await self._request("POST", f"/calls/{call_id}/status", {"status": "ended"})
 

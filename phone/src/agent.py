@@ -3,7 +3,14 @@
 import os
 
 from dotenv import load_dotenv
-from livekit.agents import AgentServer, AgentSession, JobContext, cli, inference
+from livekit.agents import (
+    AgentServer,
+    AgentSession,
+    BackgroundAudioPlayer,
+    JobContext,
+    cli,
+    inference,
+)
 from livekit.agents.voice.turn import TurnHandlingOptions
 from livekit.plugins import openai
 
@@ -13,8 +20,10 @@ from call_center import CallCenter
 from call_center_settings import call_center_settings
 from call_ending import CallEnding
 from caller_info import CallerInfo
+from hold_queue import HoldQueue
 from keypad import listen_to_keypad
 from pin_entry import PinEntry, route_keys
+from queue_settings import queue_settings
 from room_options import room_options
 from tools import session_tools
 
@@ -40,6 +49,7 @@ api_key = os.environ.get("OPENAI_API_KEY")
 if not api_key:
     raise ValueError(f"OPENAI_API_KEY is not set; {MODEL} needs it")
 call_center = CallCenter(call_center_settings(os.environ))
+hold_settings = queue_settings(os.environ)
 
 # its health and /worker pages stay on loopback, also where the host's network is shared
 server = AgentServer(host="127.0.0.1")
@@ -87,10 +97,19 @@ async def entrypoint(ctx: JobContext) -> None:
         session.generate_reply(user_input=message)
 
     pin_entry = PinEntry(call_center, caller, to_model)
+    # its own track in the caller's room, where the hold music plays
+    player = BackgroundAudioPlayer()
+    hold_queue = HoldQueue(
+        player,
+        hold_settings.music_file,
+        hold_settings.max_wait_minutes,
+        session.input.set_audio_enabled,
+        to_model,
+    )
     # no remote session host: it would let any room participant read the instructions and drive
     # the session over lk.agent.session
     await session.start(
-        agent=Assistant(tools=session_tools(call_center, pin_entry)),
+        agent=Assistant(tools=session_tools(call_center, pin_entry, hold_queue)),
         room=ctx.room,
         room_options=room_options(),
         session_host=False,
@@ -98,12 +117,17 @@ async def entrypoint(ctx: JobContext) -> None:
         record=False,
     )
 
+    await player.start(room=ctx.room)
+    ctx.add_shutdown_callback(player.aclose)
+
     caller.phone_identity = participant.identity
-    stop_keypad = listen_to_keypad(ctx.room, participant.identity, route_keys(pin_entry, to_model))
+    keys = route_keys(pin_entry, lambda: hold_queue.waiting, to_model)
+    stop_keypad = listen_to_keypad(ctx.room, participant.identity, keys)
 
     def on_close(_: object) -> None:
         stop_keypad()
         pin_entry.close()
+        hold_queue.end_wait()
         call_ending.start()
 
     session.on("close", on_close)

@@ -21,7 +21,7 @@ async def _entry(stand_in: StandIn) -> tuple[PinEntry, CallerInfo, list[str]]:
 async def test_sends_the_two_sequences_to_the_check_and_nothing_to_the_model(stand_in: StandIn):
     pin_entry, caller, reports = await _entry(stand_in)
     model: list[str] = []
-    deliver = route_keys(pin_entry, model.append)
+    deliver = route_keys(pin_entry, lambda: False, model.append)
 
     deliver("5")
     pin_entry.start()
@@ -91,3 +91,20 @@ async def test_tells_the_model_when_the_check_fails(stand_in: StandIn):
         await pin_entry.wait()
 
     assert [json.loads(report) for report in reports] == [{"pin_check": "failed"}]
+
+
+async def test_ignores_keys_on_hold_but_takes_the_pin(stand_in: StandIn):
+    pin_entry, caller, reports = await _entry(stand_in)
+    model: list[str] = []
+    deliver = route_keys(pin_entry, lambda: True, model.append)
+
+    deliver("5")
+    pin_entry.start()
+    deliver(CUSTOMER_NUMBER)
+    deliver(PIN)
+    await pin_entry.wait()
+    deliver("7")
+
+    assert caller.verified
+    assert [json.loads(report) for report in reports] == [{"verified": True}]
+    assert model == []

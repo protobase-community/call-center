@@ -47,6 +47,10 @@ services:
       # checked by the agent at its start, which names a missing or malformed one
       CALL_CENTER_URL: ${CALL_CENTER_URL:-}
       CALL_CENTER_SECRET: ${CALL_CENTER_SECRET:-}
+      # how long a caller waits on hold before the assistant comes back, and another hold music
+      # file inside the container; empty takes 5 minutes and phone/hold_music
+      MAX_WAIT_MINUTES: ${MAX_WAIT_MINUTES:-}
+      HOLD_MUSIC_FILE: ${HOLD_MUSIC_FILE:-}
       LIVEKIT_URL: ws://127.0.0.1:7880
     depends_on:
       - livekit

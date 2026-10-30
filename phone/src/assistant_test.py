@@ -4,6 +4,8 @@ from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions
 from assistant import Assistant
 from caller_info import CallerInfo
 from conftest import StandIn
+from fake_player import FakePlayer
+from hold_queue import HoldQueue
 from instructions import GREETING, INSTRUCTIONS
 from pin_entry import PinEntry
 from tools import session_tools
@@ -41,7 +43,9 @@ class _EchoStream(llm.LLMStream):
 
 def _tools(stand_in: StandIn) -> list[llm.Tool | llm.Toolset]:
     call_center = stand_in.call_center()
-    return session_tools(call_center, PinEntry(call_center, CallerInfo(), lambda _: None))
+    pin_entry = PinEntry(call_center, CallerInfo(), lambda _: None)
+    queue = HoldQueue(FakePlayer(), "hold-music.ogg", 5, lambda _: None, lambda _: None)
+    return session_tools(call_center, pin_entry, queue)
 
 
 def _system_texts(chat_ctx: llm.ChatContext) -> list[str]:
@@ -81,7 +85,7 @@ async def test_offers_the_session_tools_but_not_while_greeting(stand_in: StandIn
         greeting_tools = echo.tool_names[0]
         await session.run(user_input="Hola")
 
-    call_center_tools = ["ask_for_pin", "create_ticket", "customer_summary"]
+    call_center_tools = ["ask_for_pin", "create_ticket", "customer_summary", "ask_for_person"]
     assert sorted(greeting_tools) == sorted(["current_date_and_time", *call_center_tools])
     assert sorted(echo.tool_names[-1]) == sorted(
         ["current_date_and_time", "end_call", *call_center_tools]

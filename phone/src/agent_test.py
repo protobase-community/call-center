@@ -25,6 +25,8 @@ def _environment(monkeypatch: pytest.MonkeyPatch, stand_in: StandIn) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test")
     monkeypatch.setenv("CALL_CENTER_URL", stand_in.url)
     monkeypatch.setenv("CALL_CENTER_SECRET", stand_in.secret)
+    monkeypatch.delenv("MAX_WAIT_MINUTES", raising=False)
+    monkeypatch.delenv("HOLD_MUSIC_FILE", raising=False)
     monkeypatch.delitem(sys.modules, "agent", raising=False)
 
 
@@ -91,6 +93,19 @@ def test_stops_without_a_call_center_setting(
     [("CALL_CENTER_URL", "calls.example.com"), ("CALL_CENTER_SECRET", "not-a-secret")],
 )
 def test_stops_on_a_malformed_call_center_setting(
+    monkeypatch: pytest.MonkeyPatch, stand_in: StandIn, variable: str, value: str
+):
+    _environment(monkeypatch, stand_in)
+    monkeypatch.setenv(variable, value)
+
+    with pytest.raises(ValueError, match=f"^{variable} "):
+        importlib.import_module("agent")
+
+
+@pytest.mark.parametrize(
+    ("variable", "value"), [("MAX_WAIT_MINUTES", "0"), ("HOLD_MUSIC_FILE", "/missing.ogg")]
+)
+def test_stops_on_a_malformed_queue_setting(
     monkeypatch: pytest.MonkeyPatch, stand_in: StandIn, variable: str, value: str
 ):
     _environment(monkeypatch, stand_in)

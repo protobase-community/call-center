@@ -11,6 +11,8 @@ from livekit.rtc._proto import participant_pb2
 
 from caller_info import CallerInfo
 from conftest import StandIn
+from fake_player import FakePlayer
+from hold_queue import HoldQueue
 from keypad import listen_to_keypad
 from phone_line_stand_in import CUSTOMER_NUMBER, PIN
 from pin_entry import PinEntry, route_keys
@@ -34,13 +36,17 @@ class _Call:
         self.session = AgentSession(llm=self.model, userdata=self.caller)
         self.replies = []
         self.pin_entry = PinEntry(self.call_center, self.caller, self.to_model)
+        self.player = FakePlayer()
+        self.queue = HoldQueue(
+            self.player, "hold-music.ogg", 5, self.session.input.set_audio_enabled, self.to_model
+        )
 
     def to_model(self, message: str) -> None:
         self.replies.append(self.session.generate_reply(user_input=message))
 
     async def start(self) -> None:
         self.caller.call_id = await self.call_center.register_call("call-1", None)
-        tools = session_tools(self.call_center, self.pin_entry)
+        tools = session_tools(self.call_center, self.pin_entry, self.queue)
         await self.session.start(Agent(instructions="Help the caller.", tools=tools))
 
 
@@ -93,7 +99,9 @@ async def test_pin_entry_keeps_the_digits_from_the_model_transcript_and_logs(
 
     await call.start()
     async with call.session:
-        stop = listen_to_keypad(room, "caller", route_keys(call.pin_entry, call.to_model))
+        stop = listen_to_keypad(
+            room, "caller", route_keys(call.pin_entry, lambda: call.queue.waiting, call.to_model)
+        )
         asked = await call.session.run(user_input="I need help with my router.")
         press(f"{CUSTOMER_NUMBER}#{WRONG_PIN}#")
         await call.pin_entry.wait()
@@ -133,3 +141,36 @@ async def test_asks_for_no_pin_once_verified(stand_in: StandIn):
     result.expect.next_event().is_function_call(name="ask_for_pin")
     assert result.expect.next_event().is_function_call_output().event().item.is_error
     assert not call.pin_entry.active
+
+
+async def test_asking_for_a_person_sets_the_call_waiting_and_plays_the_music(stand_in: StandIn):
+    call = _Call(stand_in, [ToolCall("ask_for_person")])
+    await call.start()
+    async with call.session:
+        result = await call.session.run(user_input="Can I talk to a person?")
+        waiting = call.queue.waiting
+        listening = call.session.input.audio_enabled
+        call.queue.end_wait()
+
+    result.expect.next_event().is_function_call(name="ask_for_person")
+    assert _output(result) == {"changed": {"call": "waiting"}}
+    # no reply follows: the assistant stops replying while the caller waits
+    result.expect.no_more_events()
+    assert waiting
+    assert not listening
+    assert [(p.audio, p.loop) for p in call.player.played] == [("hold-music.ogg", True)]
+    status = [r for r in stand_in.requests() if r["path"].endswith("/status")]
+    assert [(r["status"], r["answer"]["status"]) for r in status] == [(200, "waiting")]
+
+
+async def test_asks_for_no_person_twice_while_waiting(stand_in: StandIn):
+    call = _Call(stand_in, [ToolCall("ask_for_person"), "You are in the queue already."])
+    await call.start()
+    call.queue.start()
+    async with call.session:
+        result = await call.session.run(user_input="Is anyone there?")
+        call.queue.end_wait()
+
+    result.expect.next_event().is_function_call(name="ask_for_person")
+    assert result.expect.next_event().is_function_call_output().event().item.is_error
+    assert len(call.player.played) == 1

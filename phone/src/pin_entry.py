@@ -3,7 +3,7 @@
 Once started, the caller's next two key sequences, each ended by the pound key or a pause, are the
 customer number and the PIN. They go straight to the app's check and never to the model, a log or
 the transcript: the model learns only the outcome, as a message such as {"verified": false}.
-Outside PIN entry the keys reach the model as before.
+Outside PIN entry the keys reach the model as before, except while the caller waits on hold.
 """
 
 import asyncio
@@ -85,12 +85,17 @@ class PinEntry:
         self._report(tool_result(verified=OUTCOMES[outcome]))
 
 
-def route_keys(pin_entry: PinEntry, to_model: Callable[[str], object]) -> Callable[[str], None]:
-    """Where each key sequence goes: to PIN entry while it is on, otherwise to the model."""
+def route_keys(
+    pin_entry: PinEntry, on_hold: Callable[[], bool], to_model: Callable[[str], object]
+) -> Callable[[str], None]:
+    """Where each key sequence goes: to PIN entry while it is on, nowhere while the caller waits
+    on hold, otherwise to the model."""
 
     def deliver(keys: str) -> None:
         if pin_entry.active:
             pin_entry.take(keys)
+            return
+        if on_hold():
             return
         to_model(keypad_message(keys))
 
