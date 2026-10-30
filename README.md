@@ -177,7 +177,7 @@ GitHub repository**. Protobase keeps the app in sync with the repository and dep
 `config/<name>/data.ts` and its screens in `config/<name>/ui.ts`, all exported from `config/index.ts`, and
 `protobase dev` and `protobase serve` serve the API and the app from them.
 
-- Tested with Protobase **0.62.2**, and CI runs against it. The app is bundled: the `@protobase/*` packages are dev
+- Tested with Protobase **0.66.5**, and CI runs against it. The app is bundled: the `@protobase/*` packages are dev
   dependencies in the caret range of that release, and dev, the build and the `db:*` scripts (`protobase run`) use the
   CLI's own copies, so a newer CLI within the range updates the app with no change to its files. `tsconfig.json`
   extends the `.protobase/tsconfig.json` that `protobase types` writes, so the editor types the CLI's copies too. A
