@@ -28,6 +28,22 @@ when both match; a wrong PIN, an unknown number and a locked PIN get the same an
 verification, and five on one customer within 24 hours lock their PIN, whichever calls they came from, until a manager
 chooses **Unlock support PIN**.
 
+The phone line reports its calls and acts for a verified caller through one public function, `/api/functions/phone-line`,
+whose every request is signed by the [Standard Webhooks](https://www.standardwebhooks.com) scheme with
+`PHONE_LINE_SECRET`. A request without a valid signature, with a timestamp more than five minutes off, or with a
+`webhook-id` sent before is refused with 401 and changes nothing, so the line signs each request, a retry too, anew.
+
+| Route | Body | Answer |
+| --- | --- | --- |
+| `POST /calls` | `{ room_name, caller_number }` | 201 with the new incoming call, or 200 with the call the room already has |
+| `POST /calls/<id>/status` | `{ status }`: `waiting` or `ended` | 200 with the call; 409 when it has ended, or is active and asked to wait |
+| `POST /calls/<id>/verify` | `{ customer_number, pin }` | `{ result }`: `verified`, `not_verified` with `tries_left`, or `locked` |
+| `GET /calls/<id>/customer` | | `{ name, tickets }`: the verified customer's name and tickets not solved |
+| `POST /calls/<id>/tickets` | `{ subject, description }` | 201 with an open ticket of the verified customer, which the call is then about |
+
+The customer and ticket routes answer 404 while the call is not verified, and they and the verify route 409 once
+the call has ended. A call is verified as one customer and is about one ticket: a second is a 409.
+
 <gap>Calls cannot reach the app yet because the phone agent's link to the app is not implemented.</gap>
 <gap>The call view cannot name the other staff members in a call because the app has no organizations, whose member list gives their names.</gap>
 <gap>The phone line cannot join calls while the sign-in policy requires two-factor authentication or passkeys because a sign-in policy exception for service accounts is not implemented in Protobase.</gap>
