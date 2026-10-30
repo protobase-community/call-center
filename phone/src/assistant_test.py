@@ -2,7 +2,10 @@ from livekit.agents import AgentSession, llm
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions
 
 from assistant import Assistant
+from caller_info import CallerInfo
+from conftest import StandIn
 from instructions import GREETING, INSTRUCTIONS
+from pin_entry import PinEntry
 from tools import session_tools
 
 
@@ -36,6 +39,11 @@ class _EchoStream(llm.LLMStream):
         )
 
 
+def _tools(stand_in: StandIn) -> list[llm.Tool | llm.Toolset]:
+    call_center = stand_in.call_center()
+    return session_tools(call_center, PinEntry(call_center, CallerInfo(), lambda _: None))
+
+
 def _system_texts(chat_ctx: llm.ChatContext) -> list[str]:
     return [
         item.text_content or ""
@@ -44,20 +52,20 @@ def _system_texts(chat_ctx: llm.ChatContext) -> list[str]:
     ]
 
 
-async def test_greets_on_enter_with_the_standing_instructions():
+async def test_greets_on_enter_with_the_standing_instructions(stand_in: StandIn):
     echo = EchoLLM()
     async with AgentSession(llm=echo) as session:
-        await session.start(Assistant(tools=session_tools()))
+        await session.start(Assistant(tools=_tools(stand_in)))
 
     greeting_request = echo.requests[0]
     assert _system_texts(greeting_request)[0] == INSTRUCTIONS
     assert GREETING in _system_texts(greeting_request)
 
 
-async def test_answers_the_user_with_the_same_instructions():
+async def test_answers_the_user_with_the_same_instructions(stand_in: StandIn):
     echo = EchoLLM()
     async with AgentSession(llm=echo) as session:
-        await session.start(Assistant(tools=session_tools()))
+        await session.start(Assistant(tools=_tools(stand_in)))
         result = await session.run(user_input="Hola, ¿qué tal?")
 
     assert _system_texts(echo.requests[-1])[0] == INSTRUCTIONS
@@ -66,12 +74,15 @@ async def test_answers_the_user_with_the_same_instructions():
     result.expect.no_more_events()
 
 
-async def test_offers_the_session_tools_but_not_while_greeting():
+async def test_offers_the_session_tools_but_not_while_greeting(stand_in: StandIn):
     echo = EchoLLM()
     async with AgentSession(llm=echo) as session:
-        await session.start(Assistant(tools=session_tools()))
+        await session.start(Assistant(tools=_tools(stand_in)))
         greeting_tools = echo.tool_names[0]
         await session.run(user_input="Hola")
 
-    assert greeting_tools == ["current_date_and_time"]
-    assert sorted(echo.tool_names[-1]) == ["current_date_and_time", "end_call"]
+    call_center_tools = ["ask_for_pin", "create_ticket", "customer_summary"]
+    assert sorted(greeting_tools) == sorted(["current_date_and_time", *call_center_tools])
+    assert sorted(echo.tool_names[-1]) == sorted(
+        ["current_date_and_time", "end_call", *call_center_tools]
+    )

@@ -9,8 +9,12 @@ from livekit.plugins import openai
 
 from agent_name import AGENT_NAME
 from assistant import Assistant
+from call_center import CallCenter
+from call_center_settings import call_center_settings
+from call_ending import CallEnding
 from caller_info import CallerInfo
-from keypad import keypad_message, listen_to_keypad
+from keypad import listen_to_keypad
+from pin_entry import PinEntry, route_keys
 from room_options import room_options
 from tools import session_tools
 
@@ -35,6 +39,7 @@ MAX_DELAY = 1.0
 api_key = os.environ.get("OPENAI_API_KEY")
 if not api_key:
     raise ValueError(f"OPENAI_API_KEY is not set; {MODEL} needs it")
+call_center = CallCenter(call_center_settings(os.environ))
 
 # its health and /worker pages stay on loopback, also where the host's network is shared
 server = AgentServer(host="127.0.0.1")
@@ -56,6 +61,13 @@ def phone_turns() -> TurnHandlingOptions:
 async def entrypoint(ctx: JobContext) -> None:
     caller = CallerInfo()
     participant = await ctx.wait_for_participant()
+    # the number LiveKit SIP gives the caller; None when it has none, such as a withheld number
+    caller_number = participant.attributes.get("sip.phoneNumber") or None
+    call_id = await call_center.register_call(ctx.room.name, caller_number)
+    caller.call_id = call_id
+    call_ending = CallEnding(lambda: call_center.end_call(call_id))
+    ctx.add_shutdown_callback(call_ending.wait)
+
     session = AgentSession(
         # the model's turn_detection stays unset, which lets the session switch it off for
         # LiveKit's turn detector
@@ -70,10 +82,15 @@ async def entrypoint(ctx: JobContext) -> None:
         # the session's default VAD, but a sound shorter than MIN_SPEECH does not start a turn
         vad=inference.VAD(model="silero", min_speech_duration=MIN_SPEECH),
     )
+
+    def to_model(message: str) -> None:
+        session.generate_reply(user_input=message)
+
+    pin_entry = PinEntry(call_center, caller, to_model)
     # no remote session host: it would let any room participant read the instructions and drive
     # the session over lk.agent.session
     await session.start(
-        agent=Assistant(tools=session_tools()),
+        agent=Assistant(tools=session_tools(call_center, pin_entry)),
         room=ctx.room,
         room_options=room_options(),
         session_host=False,
@@ -82,12 +99,14 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     caller.phone_identity = participant.identity
-    stop_keypad = listen_to_keypad(
-        ctx.room,
-        participant.identity,
-        lambda keys: session.generate_reply(user_input=keypad_message(keys)),
-    )
-    session.on("close", lambda _: stop_keypad())
+    stop_keypad = listen_to_keypad(ctx.room, participant.identity, route_keys(pin_entry, to_model))
+
+    def on_close(_: object) -> None:
+        stop_keypad()
+        pin_entry.close()
+        call_ending.start()
+
+    session.on("close", on_close)
 
 
 if __name__ == "__main__":

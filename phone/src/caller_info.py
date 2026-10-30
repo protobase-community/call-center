@@ -9,3 +9,7 @@ class CallerInfo:
     time_zone: str | None = None
     # the identity of the caller's SIP participant
     phone_identity: str | None = None
+    # the call's record in the call center app, once registered
+    call_id: int | None = None
+    # whether the caller gave a customer number and PIN the app verified
+    verified: bool = False
