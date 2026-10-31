@@ -1,17 +1,29 @@
-# Advisory AI review of every pull request; see protobase-community/.github's ai-pr-review workflow.
-# pull_request_target runs this file from the base branch and never checks out the pull request.
+# AI review of every pull request; see protobase-community/.github's ai-pr-review workflow. A review that finds no
+# issues also merges the pull request, once every other check passed. The protobase bump starts the review of its
+# pull requests with workflow_dispatch. pull_request_target runs this file from the base branch and never checks out
+# the pull request.
 name: ai-review
 
 on:
   pull_request_target: # zizmor: ignore[dangerous-triggers] nothing from the pull request runs
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: The pull request to review.
+        required: true
+        type: number
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
   review:
     uses: protobase-community/.github/.github/workflows/ai-pr-review.yml@main # zizmor: ignore[unpinned-uses] main is the reviewed version
+    with:
+      # Only the template itself; an app created from it reviews without merging on its own.
+      auto-merge: ${{ github.repository_owner == 'protobase-community' }}
+      pr-number: ${{ inputs.pr-number || 0 }}
     secrets:
       SCW_PR_REVIEW_SECRET_KEY: ${{ secrets.SCW_PR_REVIEW_SECRET_KEY }}
