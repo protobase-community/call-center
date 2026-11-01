@@ -34,6 +34,7 @@ jobs:
     with:
       # Only the template itself; an app created from it reviews without merging on its own.
       auto-merge: ${{ github.repository_owner == 'protobase-community' }}
-      pr-number: ${{ inputs.pr-number || 0 }}
+      # A dispatched run's inputs arrive as text; the shared workflow's pr-number is a number.
+      pr-number: ${{ fromJSON(inputs.pr-number || '0') }}
     secrets:
       SCW_PR_REVIEW_SECRET_KEY: ${{ secrets.SCW_PR_REVIEW_SECRET_KEY }}
