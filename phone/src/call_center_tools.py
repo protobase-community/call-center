@@ -22,7 +22,7 @@ this call has no tries left. Never say whether a customer number exists."""
 _CUSTOMER_SUMMARY = """Get the verified caller's name and their tickets not solved yet."""
 
 _CREATE_TICKET = """Open a ticket for the verified caller about what they need help with; a call is
-about one ticket.
+about one ticket. A caller still in the queue for a person leaves it.
 subject: a short line that names the problem, in the caller's language.
 description: what the caller told you about it, in a few sentences."""
 
@@ -53,9 +53,21 @@ def customer_summary_tool(call_center: CallCenter) -> llm.FunctionTool:
     return function_tool(customer_summary, description=_CUSTOMER_SUMMARY)
 
 
+async def _leave_queue(call_center: CallCenter, caller: CallerInfo, call_id: int) -> None:
+    """Takes the call out of the app's queue, unless a person has answered it meanwhile."""
+    try:
+        await call_center.leave_queue(call_id)
+    except CallCenterError as error:
+        if error.problem != "call-answered":
+            raise
+    caller.queued = False
+
+
 def create_ticket_tool(call_center: CallCenter) -> llm.FunctionTool:
     async def create_ticket(context: RunContext[CallerInfo], subject: str, description: str) -> str:
         call_id = _verified_call(context.userdata)
+        if context.userdata.queued:
+            await _leave_queue(call_center, context.userdata, call_id)
         try:
             ticket = await call_center.create_ticket(call_id, subject, description)
         except CallCenterError as error:

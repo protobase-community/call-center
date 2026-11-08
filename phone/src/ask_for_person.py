@@ -31,6 +31,7 @@ def ask_for_person_tool(call_center: CallCenter, queue: HoldQueue) -> llm.Functi
             if error.problem == "call-answered":
                 raise ToolError("A person has answered this call already") from error
             raise
+        context.userdata.queued = True
         await context.wait_for_playout()
         queue.start()
         return ToolResult(tool_result(changed={"call": "waiting"}), reply_required=False)

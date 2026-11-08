@@ -140,14 +140,31 @@ describe('reporting calls', () => {
     expect((await callOf(call)).ended_at).toEqual(ended.ended_at)
   })
 
+  it('takes a waiting call back to incoming, clearing when it started waiting', async () => {
+    const call = await createCall()
+    await send('POST', `/calls/${call}/status`, { status: 'waiting' })
+    expect((await send('POST', `/calls/${call}/status`, { status: 'incoming' })).status).toBe(200)
+    expect(await callOf(call)).toMatchObject({ status: 'incoming', waiting_since: null })
+    expect((await send('POST', `/calls/${call}/status`, { status: 'incoming' })).status).toBe(200)
+
+    expect((await send('POST', `/calls/${call}/status`, { status: 'waiting' })).status).toBe(200)
+    expect((await callOf(call)).waiting_since).toBeInstanceOf(Date)
+  })
+
   it('leaves active to staff, and moves no call out of ended', async () => {
     const call = await createCall()
     expect((await send('POST', `/calls/${call}/status`, { status: 'active' })).status).toBe(400)
 
     await app.sql`update public.phone_calls set status = 'active' where id = ${call}`
     expect((await send('POST', `/calls/${call}/status`, { status: 'waiting' })).status).toBe(409)
+    const answered = await send('POST', `/calls/${call}/status`, { status: 'incoming' })
+    expect(answered.status).toBe(409)
+    expect((await answered.json()).type).toBe('urn:protobase:problem:call-answered')
     expect((await send('POST', `/calls/${call}/status`, { status: 'ended' })).status).toBe(200)
     expect((await send('POST', `/calls/${call}/status`, { status: 'waiting' })).status).toBe(409)
+    const ended = await send('POST', `/calls/${call}/status`, { status: 'incoming' })
+    expect(ended.status).toBe(409)
+    expect((await ended.json()).type).toBe('urn:protobase:problem:call-ended')
     expect((await callOf(call)).status).toBe('ended')
   })
 

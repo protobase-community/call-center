@@ -32,6 +32,24 @@ async def test_verifies_a_caller_and_acts_for_them(stand_in: StandIn):
     assert ticket["status"] == "open"
 
 
+async def test_takes_a_waiting_call_back_from_the_queue(stand_in: StandIn):
+    call_center = stand_in.call_center()
+    call = await call_center.register_call("call-1", None)
+    await call_center.wait_in_queue(call)
+    await call_center.leave_queue(call)
+    await call_center.end_call(call)
+
+    with pytest.raises(CallCenterError) as refused:
+        await call_center.leave_queue(call)
+
+    assert refused.value.problem == "call-ended"
+    answers = [r["answer"] for r in stand_in.requests() if r["path"].endswith("/status")]
+    assert [(a["status"], a["waiting_since"] is None) for a in answers[:2]] == [
+        ("waiting", False),
+        ("incoming", True),
+    ]
+
+
 async def test_a_refusal_names_the_route_status_and_problem_but_not_the_body(stand_in: StandIn):
     call_center = stand_in.call_center()
     call = await call_center.register_call("call-1", None)
