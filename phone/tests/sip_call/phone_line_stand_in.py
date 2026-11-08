@@ -134,14 +134,17 @@ class PhoneLine:
 
     def _set_status(self, call: dict[str, Any], body: dict[str, Any]) -> Answer:
         status = body.get("status")
-        if status not in ("waiting", "ended"):
-            raise Problem(400, "invalid-body", "Bad Request", "Give waiting or ended")
-        if call["status"] == "ended" and status == "waiting":
+        if status not in ("waiting", "incoming", "ended"):
+            raise Problem(400, "invalid-body", "Bad Request", "Give waiting, incoming or ended")
+        if call["status"] == "ended" and status != "ended":
             raise Problem(409, "call-ended", "Conflict", f"Phone call {call['id']} has ended")
-        if status == "waiting" and call["status"] not in ("incoming", "waiting"):
+        if status != "ended" and call["status"] not in ("incoming", "waiting"):
             raise Problem(
                 409, "call-answered", "Conflict", f"Phone call {call['id']} is {call['status']}"
             )
+        if status == "incoming":
+            call.update(status=status, waiting_since=None)
+            return 200, _shown(call, _ANSWERED)
         time_field = "waiting_since" if status == "waiting" else "ended_at"
         call.update(status=status, **{time_field: call[time_field] or _now()})
         return 200, _shown(call, _ANSWERED)

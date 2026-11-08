@@ -44,6 +44,11 @@ class _Call:
     def to_model(self, message: str) -> None:
         self.replies.append(self.session.generate_reply(user_input=message))
 
+    async def verify(self) -> None:
+        assert self.caller.call_id is not None
+        await self.call_center.verify(self.caller.call_id, CUSTOMER_NUMBER, PIN)
+        self.caller.verified = True
+
     async def start(self) -> None:
         self.caller.call_id = await self.call_center.register_call("call-1", None)
         tools = session_tools(self.call_center, self.pin_entry, self.queue)
@@ -174,3 +179,29 @@ async def test_asks_for_no_person_twice_while_waiting(stand_in: StandIn):
     result.expect.next_event().is_function_call(name="ask_for_person")
     assert result.expect.next_event().is_function_call_output().event().item.is_error
     assert len(call.player.played) == 1
+
+
+async def test_a_ticket_after_the_longest_wait_takes_the_call_out_of_the_queue(stand_in: StandIn):
+    call = _Call(stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "Done."])
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        call.queue.end_wait()
+        result = await call.session.run(user_input="A ticket is fine.")
+
+    result.expect.next_event().is_function_call(name="create_ticket")
+    assert _output(result)["changed"]["ticket"]["subject"] == TICKET["subject"]
+    assert not call.caller.queued
+    status = [r["answer"]["status"] for r in stand_in.requests() if r["path"].endswith("/status")]
+    assert status == ["waiting", "incoming"]
+
+
+async def test_a_ticket_without_a_wait_leaves_the_call_as_it_is(stand_in: StandIn):
+    call = _Call(stand_in, [ToolCall("create_ticket", TICKET), "Done."])
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Open a ticket.")
+
+    assert not [r for r in stand_in.requests() if r["path"].endswith("/status")]

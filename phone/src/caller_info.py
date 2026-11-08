@@ -13,3 +13,5 @@ class CallerInfo:
     call_id: int | None = None
     # whether the caller gave a customer number and PIN the app verified
     verified: bool = False
+    # whether the app shows the call waiting for a person, which it still does once the music stops
+    queued: bool = False

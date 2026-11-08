@@ -36,7 +36,7 @@ whose every request is signed by the [Standard Webhooks](https://www.standardweb
 | Route | Body | Answer |
 | --- | --- | --- |
 | `POST /calls` | `{ room_name, caller_number }` | 201 with the new incoming call, or 200 with the call the room already has |
-| `POST /calls/<id>/status` | `{ status }`: `waiting` or `ended` | 200 with the call; 409 when it has ended, or is active and asked to wait |
+| `POST /calls/<id>/status` | `{ status }`: `waiting`, `incoming` to leave the queue, or `ended` | 200 with the call; 409 when it has ended, or is active and asked to wait or leave the queue |
 | `POST /calls/<id>/verify` | `{ customer_number, pin }` | `{ result }`: `verified`, `not_verified` with `tries_left`, or `locked` |
 | `GET /calls/<id>/customer` | | `{ name, tickets }`: the verified customer's name and tickets not solved |
 | `POST /calls/<id>/tickets` | `{ subject, description }` | 201 with an open ticket of the verified customer, which the call is then about |
@@ -92,10 +92,10 @@ A caller who asks for a person waits in the queue: the agent says it is finding 
 staff see it among the waiting calls, stops listening and plays hold music in the caller's own room, looped through
 LiveKit Agents' `BackgroundAudioPlayer`. Keys pressed meanwhile are ignored, unless PIN entry is on. The wait ends when
 the caller hangs up or after `MAX_WAIT_MINUTES` (5 when unset): then the music stops and the agent offers to open a
-ticket instead, or puts the caller back in the queue. The music is `phone/hold_music/hold-music.ogg`, self-made and
-public domain (CC0), see its README; `HOLD_MUSIC_FILE` names another file.
+ticket instead, which sets the call `incoming` again, or puts the caller back in the queue. The music is
+`phone/hold_music/hold-music.ogg`, self-made and public domain (CC0), see its README; `HOLD_MUSIC_FILE` names another
+file.
 <gap>A person who joins a waiting call cannot stop the hold music because the phone line does not yet watch for staff joining the room.</gap>
-<gap>A caller who takes a ticket after the longest wait stays waiting in the app because the phone line has no route that takes a call back from the queue.</gap>
 
 `phone/sip/inbound-trunk.json` is for local development only: its password is in this repository. For a real
 trunk, write a trunk file with a long random password outside the repository and name it as `SIP_TRUNK_FILE` in
