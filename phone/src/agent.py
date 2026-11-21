@@ -26,7 +26,7 @@ from keypad import listen_to_keypad
 from pin_entry import PinEntry, route_keys
 from queue_settings import queue_settings
 from room_options import room_options
-from staff_presence import StaffPresence, watch_staff
+from staff_presence import StaffPresence, quiet_tool_replies, watch_staff
 from tools import session_tools
 
 load_dotenv()
@@ -114,7 +114,7 @@ async def entrypoint(ctx: JobContext) -> None:
         to_model,
     )
     staff = StaffPresence(
-        hold_queue.end_wait,
+        hold_queue.staff_in,
         session.input.set_audio_enabled,
         lambda: session.interrupt(force=True),
         to_model,
@@ -146,6 +146,7 @@ async def entrypoint(ctx: JobContext) -> None:
         call_ending.start()
 
     session.on("close", on_close)
+    session.on("function_tools_executed", quiet_tool_replies(staff))
 
 
 if __name__ == "__main__":

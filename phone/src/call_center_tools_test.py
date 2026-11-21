@@ -174,3 +174,19 @@ async def test_asks_for_no_person_twice_while_waiting(stand_in: StandIn):
     result.expect.next_event().is_function_call(name="ask_for_person")
     assert result.expect.next_event().is_function_call_output().event().item.is_error
     assert len(call.player.played) == 1
+
+
+async def test_staff_who_join_while_the_caller_is_put_in_the_queue_get_no_hold_music(
+    stand_in: StandIn,
+):
+    call = _Call(stand_in, [ToolCall("ask_for_person")])
+    await call.start()
+    # staff join after the call is set waiting, before the music would start
+    call.queue.staff_in(True)
+    async with call.session:
+        result = await call.session.run(user_input="Can I talk to a person?")
+
+    result.expect.next_event().is_function_call(name="ask_for_person")
+    assert _output(result) == {"changed": {"call": "answered"}}
+    assert not call.queue.waiting
+    assert call.player.played == []

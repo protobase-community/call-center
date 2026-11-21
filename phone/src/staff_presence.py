@@ -1,14 +1,16 @@
 """The agent stepping back while staff are in the Protobase call, and taking over when they leave.
 
 The bridge marks in its participant's attributes whether staff are in the call (see
-staff_attribute.py). When the first arrives, the hold music stops, the assistant stops hearing the
-caller and breaks off what it was saying. When the last leaves, or the bridge does, while the
+staff_attribute.py). When the first arrives, the hold music stops and no wait starts, the
+assistant stops hearing the caller, breaks off what it was saying, and makes no reply of a tool
+result that comes in later. When the last leaves, or the bridge does, while the
 caller is still there, the assistant hears the caller again and learns so as {"staff": "left"}.
 """
 
 from collections.abc import Callable
 
 from livekit import rtc
+from livekit.agents import FunctionToolsExecutedEvent
 
 from staff_attribute import staff_present
 from tool_result import tool_result
@@ -17,12 +19,13 @@ from tool_result import tool_result
 class StaffPresence:
     def __init__(
         self,
-        end_wait: Callable[[], None],
+        queue_staff: Callable[[bool], None],
         listen: Callable[[bool], None],
         interrupt: Callable[[], object],
         report: Callable[[str], object],
     ) -> None:
-        self._end_wait = end_wait
+        # tells the hold queue, which ends a wait and starts none while staff are in
+        self._queue_staff = queue_staff
         self._listen = listen
         self._interrupt = interrupt
         self._report = report
@@ -32,13 +35,24 @@ class StaffPresence:
         if present == self.present:
             return
         self.present = present
+        self._queue_staff(present)
         if present:
-            self._end_wait()
             self._listen(False)
             self._interrupt()
             return
         self._listen(True)
         self._report(tool_result(staff="left"))
+
+
+def quiet_tool_replies(presence: StaffPresence) -> Callable[[FunctionToolsExecutedEvent], None]:
+    """A `function_tools_executed` handler: a tool that finishes while staff are in, such as a
+    lookup that outlived the interruption, gets no spoken reply."""
+
+    def on_executed(event: FunctionToolsExecutedEvent) -> None:
+        if presence.present:
+            event.cancel_tool_reply()
+
+    return on_executed
 
 
 def watch_staff(room: rtc.Room, presence: StaffPresence) -> Callable[[], None]:
