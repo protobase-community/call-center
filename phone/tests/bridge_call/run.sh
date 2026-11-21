@@ -98,12 +98,16 @@ docker compose logs bridge >"$out/bridge.log"
 
 # a wrong password: the bridge gives up on the call, which stays with the assistant
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# the bridge gets its own password back however this part ends, and the run keeps its status
+restore_bridge() { docker compose up -d --no-deps --force-recreate bridge >/dev/null 2>&1 || true; }
+trap 'status=$?; restore_bridge; kill "$app" 2>/dev/null || true; exit "$status"' EXIT
 PHONE_LINE_PASSWORD="wrong-$PHONE_LINE_PASSWORD" docker compose up -d --no-deps --force-recreate bridge
 wait_registered bridge
 docker compose --profile test run --rm --no-deps sip-call sh bridge_call.sh wrong-password 20
 sleep 10
 docker compose logs --since "$since" bridge >"$out/wrong-password-bridge.log"
-docker compose up -d --no-deps --force-recreate bridge
+restore_bridge
+trap 'kill "$app" 2>/dev/null || true' EXIT
 
 docker compose logs agent >"$out/agent.log"
 checked=0

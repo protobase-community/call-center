@@ -149,6 +149,8 @@ cp .env.example .env              # set OPENAI_API_KEY, and LIVEKIT_API_SECRET t
 docker compose up --build         # LiveKit, LiveKit SIP, Redis, the trunk's setup, the agent and the bridge
 tests/sip_call/run.sh             # SIPp calls: two refused, one the agent must greet and answer, one with a PIN,
                                   # one that asks for a person
+(cd .. && bunx playwright install chromium)  # once: the browser of the bridge test; on Linux, add
+                                  # --with-deps when its system libraries are missing
 tests/bridge_call/run.sh          # SIPp callers and a staff member in Chromium, through the app
 uv run pytest && uv run pyright && uv run ruff check src tests
 ```
