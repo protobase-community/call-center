@@ -9,13 +9,14 @@
 #   database migrated, as the README's local steps say; the model's key in phone/.env or the
 #   environment; Chromium for Playwright: `bunx playwright install chromium`)
 # It starts the app with `bun run dev` on port 5173 and the phone stack, with accounts and secrets
-# of its own, and leaves the stack running. Writes everything to BRIDGE_CALL_OUT, by default
-# /tmp/call-center-bridge-call: outside the project, since `bun run dev` closes every call's socket
-# when a file in the project changes.
+# of its own, and leaves the stack running. Stop your own `bun run dev` first. Writes everything to
+# BRIDGE_CALL_OUT, by default a new private directory under /tmp: outside the project, since
+# `bun run dev` closes every call's socket when a file in the project changes.
 set -euo pipefail
 phone=$(cd "$(dirname "$0")/../.." && pwd -P)
 root=$(dirname "$phone")
-out=${BRIDGE_CALL_OUT:-/tmp/call-center-bridge-call}
+out=${BRIDGE_CALL_OUT:-$(mktemp -d /tmp/call-center-bridge-call.XXXXXX)}
+echo "writing to $out"
 export SIP_CALL_OUT=$out
 cd "$phone"
 mkdir -p "$out"
@@ -45,7 +46,11 @@ create "$ADMIN_EMAIL" admin "$ADMIN_PASSWORD"
 create "$STAFF_EMAIL" agent "$STAFF_PASSWORD"
 create "$PHONE_LINE_EMAIL" phone_line "$PHONE_LINE_PASSWORD"
 
-# the app, on this stack's LiveKit server
+# the app, on this stack's LiveKit server; an app already on the port would answer in its place
+if curl -s -o /dev/null "$APP_URL/"; then
+  echo "something answers on $APP_URL already: stop your own bun run dev first" >&2
+  exit 1
+fi
 (cd "$root" && LIVEKIT_URL=ws://127.0.0.1:7880 LIVEKIT_API_KEY=$LIVEKIT_API_KEY \
   LIVEKIT_API_SECRET=$LIVEKIT_API_SECRET PHONE_LINE_SECRET=$PHONE_LINE_SECRET \
   exec bun run dev >"$out/app.log" 2>&1) &

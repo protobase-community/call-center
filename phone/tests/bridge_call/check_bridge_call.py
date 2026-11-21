@@ -81,6 +81,9 @@ def heard(side: Envelope, clip: Envelope, start: float) -> dict:
     best = {"share": 0.0, "correlation": 0.0, "delay": None}
     for lag in range(int(MAX_DELAY / FRAME) + 1):
         at = start + lag * FRAME
+        if at < side.start:
+            # the recording starts later: a later delay may still find the whole line
+            continue
         window = side.window(at, at + len(clip.levels) * FRAME)
         if len(window) < len(clip.levels):
             break

@@ -39,3 +39,11 @@ def test_silence_allows_a_stray_frame():
     side = _side([(5.0, _speech(0.02, 3) + 20000)], 10.0, start=0.0)
     assert silent(side, 0.0, 10.0)["passed"]
     assert not silent(_side([(2.0, _speech(3.0, 4))], 10.0, 0.0), 0.0, 10.0)["passed"]
+
+
+def test_a_recording_that_starts_after_the_line_was_said_still_hears_it():
+    line = _speech(3.0, 5)
+    side = _side([(0.0, line)], 6.0, start=1000.3)
+    found = heard(side, envelope(line, RATE), 1000.0)
+    assert found["passed"]
+    assert found["delay"] == 0.3

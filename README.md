@@ -163,13 +163,14 @@ of the app's phone line that checks signatures as the app does and logs what it 
 a person and must hear the hold music without a pause from 12 to 27 seconds after its request, and see the stand-in set
 the call `waiting`; the agent's side is in `phone/sip-call-out/person-agent.wav`.
 
-`tests/bridge_call/run.sh` goes through the app itself: it starts `bun run dev` on the database of the app's `.env`,
+`tests/bridge_call/run.sh` goes through the app itself: stop your own `bun run dev` first, since it starts its own
+on the database of the app's `.env`,
 with accounts and a phone line secret of its own, and the phone stack against it. A caller waits on hold until a staff
 member joins in Chromium through `@protobase/client/calls`, then each says a line, recorded on both sides: each side
 must hear the other's line and not its own, and neither the music nor the assistant. A second caller's staff member
 joins while the assistant talks, after an admin revoked the phone line's session, and leaves again, after which the
 assistant must speak. A third call runs the bridge on a wrong password: it must give up after one sign-in. Its
-output goes to `/tmp/call-center-bridge-call`, outside the project, since `bun run dev` restarts the calls' sockets on
+output goes to a new private directory under `/tmp` (or `BRIDGE_CALL_OUT`), outside the project, since `bun run dev` restarts the calls' sockets on
 any change in it.
 
 Every published port listens on 127.0.0.1 only, and LiveKit runs on the key pair from `.env`, never in dev mode.
