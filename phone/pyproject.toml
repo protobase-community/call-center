@@ -22,20 +22,20 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "tests/sip_call"]
+pythonpath = ["src", "tests/sip_call", "tests/bridge_call"]
 testpaths = ["src", "tests"]
 python_files = ["*_test.py"]
 asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests/sip_call"]
+src = ["src", "tests/sip_call", "tests/bridge_call"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.pyright]
 include = ["src", "tests"]
-extraPaths = ["src", "tests/sip_call"]
+extraPaths = ["src", "tests/sip_call", "tests/bridge_call"]
 venvPath = "."
 venv = ".venv"

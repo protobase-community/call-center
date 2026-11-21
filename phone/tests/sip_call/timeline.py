@@ -18,10 +18,11 @@ def timeline(out: str, seconds: float, lines: list[tuple[float, str]]) -> None:
         with wave.open(clip) as source:
             if source.getnchannels() != 1 or source.getsampwidth() != 2:
                 raise ValueError(f"{clip} is not 16-bit mono")
-            if rate not in (None, source.getframerate()):
+            clip_rate = source.getframerate()
+            if rate not in (None, clip_rate):
                 raise ValueError(f"{clip} has another rate than the clips before it")
-            rate = source.getframerate()
-            start = int(at * rate) * 2
+            rate = clip_rate
+            start = int(at * clip_rate) * 2
             if start < len(track):
                 raise ValueError(f"{clip} starts before the line before it ends")
             track += bytes(start - len(track)) + source.readframes(source.getnframes())

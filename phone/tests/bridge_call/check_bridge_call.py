@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sip_call"))
-from check_call import split_call  # noqa: E402
+from check_call import rtp_samples, split_call, udp_packets  # noqa: E402
 
 FRAME = 0.02
 # 16-bit RMS of a 20 ms frame that counts as sound, as tests/sip_call's checks take it
@@ -99,9 +99,18 @@ def silent(side: Envelope, start: float, end: float) -> dict:
 
 def caller_side(pcap: Path, caller_port: int) -> tuple[Envelope, float]:
     """What the caller heard, and when their timeline started (their first packet)."""
-    sent, received = split_call(pcap.read_bytes(), caller_port)
+    data = pcap.read_bytes()
+    sent, received = split_call(data, caller_port)
     if not sent or not received:
         raise ValueError(f"{pcap} holds no audio both ways")
+    # split_call times the packets from the first; the staff side has this machine's clock
+    epoch = next(
+        at
+        for at, source, destination, payload in udp_packets(data)
+        if caller_port in (source, destination) and rtp_samples(payload) is not None
+    )
+    for audio in sent + received:
+        audio.at += epoch
     start = received[0].at
     # each packet is 20 ms, placed at the time it came, so a lost one leaves a quiet frame
     levels = np.zeros(int(round((received[-1].at - start) / FRAME)) + 1)
@@ -113,10 +122,8 @@ def caller_side(pcap: Path, caller_port: int) -> tuple[Envelope, float]:
 
 def staff_side(webm: Path, recording_started: float) -> Envelope:
     wav = webm.with_suffix(".wav")
-    subprocess.run(
-        ["ffmpeg", "-loglevel", "error", "-y", "-i", str(webm), "-ac", "1", "-ar", "16000", str(wav)],
-        check=True,
-    )
+    decode = ["ffmpeg", "-loglevel", "error", "-y", "-i", str(webm), "-ac", "1", "-ar", "16000"]
+    subprocess.run([*decode, str(wav)], check=True)
     samples, rate = read_wav(wav)
     return envelope(samples, rate, recording_started)
 
