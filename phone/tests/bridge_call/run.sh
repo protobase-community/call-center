@@ -88,6 +88,9 @@ driver sessions
 call staff-first 60 16:person.wav 30:caller-line.wav
 driver sessions
 
+# the bridge's log of the calls above, before it is recreated
+docker compose logs bridge >"$out/bridge.log"
+
 # a wrong password: the bridge gives up on the call, which stays with the assistant
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 PHONE_LINE_PASSWORD="wrong-$PHONE_LINE_PASSWORD" docker compose up -d --no-deps --force-recreate bridge
@@ -98,6 +101,7 @@ docker compose logs --since "$since" bridge >"$out/wrong-password-bridge.log"
 docker compose up -d --no-deps --force-recreate bridge
 
 docker compose logs agent >"$out/agent.log"
-docker compose logs bridge >"$out/bridge.log"
-uv run python tests/bridge_call/check_bridge_call.py "$out" "$phone/tests/sip_call"
-uv run python tests/bridge_call/check_sign_in.py "$out"
+checked=0
+uv run python tests/bridge_call/check_bridge_call.py "$out" "$phone/tests/sip_call" || checked=1
+uv run python tests/bridge_call/check_sign_in.py "$out" || checked=1
+exit "$checked"
