@@ -52,3 +52,27 @@ async def test_a_failed_write_is_tried_again_on_the_next_roster():
     assert participant.written == ["true"]
     with pytest.raises(ConnectionError):
         await bridge._background.close()
+
+
+async def test_a_failed_playout_ends_the_bridge_during_the_call(monkeypatch: pytest.MonkeyPatch):
+    import call_bridge
+
+    async def failing_playout(*_: object) -> None:
+        raise ConnectionError("the room took no more audio")
+
+    async def forever(*_: object) -> None:
+        await asyncio.sleep(60)
+
+    async def published(*_: object) -> None:
+        return
+
+    monkeypatch.setattr(call_bridge, "play_mix", failing_playout)
+    monkeypatch.setattr(call_bridge, "room_source", lambda: None)
+    monkeypatch.setattr(call_bridge, "MixTrack", lambda mix: None)
+    monkeypatch.setattr(call_bridge.rtc.LocalAudioTrack, "create_audio_track", lambda *_: None)
+    participant = SimpleNamespace(publish_track=published)
+    room = SimpleNamespace(local_participant=participant, remote_participants={})
+    client = SimpleNamespace(run=forever, publish=forever)
+    bridge = CallBridge(room, "caller")  # type: ignore[arg-type]
+    with pytest.raises(ConnectionError, match="no more audio"):
+        await asyncio.wait_for(bridge.bridge(client), 5)  # type: ignore[arg-type]
