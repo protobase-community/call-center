@@ -16,11 +16,12 @@ class KeyedTasks:
     def __contains__(self, key: Hashable) -> bool:
         return key in self._tasks
 
-    def start(self, key: Hashable, work: Coroutine[Any, Any, None]) -> None:
+    def start(self, key: Hashable, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
         if key in self._tasks:
             work.close()
             raise RuntimeError(f"A task for {key} runs already")
-        self._tasks[key] = asyncio.create_task(work)
+        task = self._tasks[key] = asyncio.create_task(work)
+        return task
 
     def stop(self, key: Hashable) -> None:
         task = self._tasks.pop(key, None)

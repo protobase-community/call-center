@@ -35,7 +35,11 @@ class CallBridge:
         self._room_tracks = KeyedTasks()
         self._members = KeyedTasks()
         self._background = KeyedTasks()
-        self._staff: bool | None = None
+        # whether staff are in, as the room's attributes last said so, and as a write under way will
+        self._marked: bool | None = None
+        self._marking: asyncio.Task[None] | None = None
+        self._wanted: bool | None = None
+        self._writes = 0
         self.hung_up = asyncio.Event()
 
     def open_call(self, url: str) -> OpenCall:
@@ -89,9 +93,14 @@ class CallBridge:
             if client is not None:
                 await client.leave()
         finally:
-            await self._room_tracks.close()
-            await self._members.close()
-            await self._background.close()
+            # each group closes even when one before it raises
+            try:
+                await self._room_tracks.close()
+            finally:
+                try:
+                    await self._members.close()
+                finally:
+                    await self._background.close()
 
     def _on_subscribed(
         self,
@@ -120,10 +129,15 @@ class CallBridge:
         self._members.start(sid, feed_member(track, self._from_call, sid))
 
     def _on_members(self, members: list[str]) -> None:
+        """Marks staff presence in the room; a failed write is tried again on the next roster."""
         present = staff_in(members)
-        if present == self._staff:
+        writing = self._marking is not None and not self._marking.done()
+        if (writing and self._wanted == present) or (not writing and self._marked == present):
             return
-        self._staff = present
-        attributes = staff_attributes(present)
-        self._background.stop("staff")
-        self._background.start("staff", self._room.local_participant.set_attributes(attributes))
+        self._wanted = present
+        self._writes += 1
+        self._marking = self._background.start(("staff", self._writes), self._mark(present))
+
+    async def _mark(self, present: bool) -> None:
+        await self._room.local_participant.set_attributes(staff_attributes(present))
+        self._marked = present

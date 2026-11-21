@@ -1,3 +1,6 @@
+import asyncio
+from types import SimpleNamespace
+
 import aiohttp
 import pytest
 from livekit import api
@@ -31,3 +34,18 @@ async def test_a_failed_dispatch_leaves_the_call_with_the_assistant(
 async def test_another_failure_is_not_hidden():
     with pytest.raises(ValueError):
         await dispatch_bridge(_Api(ValueError("bug")), "call-test", 7)  # type: ignore[arg-type]
+
+
+class _Stalled:
+    async def create_dispatch(self, request: object) -> None:
+        await asyncio.sleep(60)
+
+
+async def test_a_stalled_dispatch_gives_up_in_time(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+):
+    import bridge_dispatch
+
+    monkeypatch.setattr(bridge_dispatch, "TIMEOUT", 0.05)
+    await dispatch_bridge(SimpleNamespace(agent_dispatch=_Stalled()), "call-test", 7)  # type: ignore[arg-type]
+    assert "no bridge for phone call 7" in caplog.text
