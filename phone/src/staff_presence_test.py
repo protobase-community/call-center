@@ -42,3 +42,34 @@ def test_an_unchanged_presence_does_nothing():
     presence.update(True)
     assert agent.events.count("interrupted") == 1
     assert {"staff": "left"} not in agent.events
+
+
+class _Room:
+    def __init__(self, participants: list[object]) -> None:
+        self.remote_participants = {str(i): p for i, p in enumerate(participants)}
+        self.handlers: dict[str, object] = {}
+
+    def on(self, event: str, handler: object) -> None:
+        self.handlers[event] = handler
+
+    def off(self, event: str, handler: object) -> None:
+        self.handlers.pop(event, None)
+
+
+def test_staff_already_in_when_the_watch_begins_count():
+    from types import SimpleNamespace
+
+    from livekit import rtc
+
+    from staff_attribute import staff_attributes
+    from staff_presence import watch_staff
+
+    bridge = SimpleNamespace(
+        kind=rtc.ParticipantKind.PARTICIPANT_KIND_AGENT, attributes=staff_attributes(True)
+    )
+    caller = SimpleNamespace(kind=rtc.ParticipantKind.PARTICIPANT_KIND_SIP, attributes={})
+    agent = _Agent()
+    presence = agent.presence()
+    stop = watch_staff(_Room([caller, bridge]), presence)  # type: ignore[arg-type]
+    assert presence.present
+    stop()

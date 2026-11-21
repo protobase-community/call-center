@@ -57,6 +57,9 @@ def watch_staff(room: rtc.Room, presence: StaffPresence) -> Callable[[], None]:
 
     room.on("participant_attributes_changed", on_attributes)
     room.on("participant_disconnected", on_disconnected)
+    # staff may have joined before the watch began, such as while the session started
+    for participant in room.remote_participants.values():
+        on_attributes({}, participant)
 
     def stop() -> None:
         room.off("participant_attributes_changed", on_attributes)
