@@ -55,11 +55,17 @@ class PhoneLineLogin:
         # no cookie jar: the request carries no cookie, and the session's is kept here only
         async with (
             aiohttp.ClientSession(timeout=timeout, cookie_jar=aiohttp.DummyCookieJar()) as http,
-            http.post(self._url, json={"email": self._email, "password": self._password}) as answer,
+            # never follow a redirect with the password, which could lead to plain http
+            http.post(
+                self._url,
+                json={"email": self._email, "password": self._password},
+                allow_redirects=False,
+            ) as answer,
         ):
             if answer.status in REFUSED:
                 raise SignInRefused(answer.status)
-            if not answer.ok:
+            # a redirect is no sign-in either
+            if not 200 <= answer.status < 300:
                 raise SignInFailed(answer.status)
             cookie = "; ".join(f"{name}={morsel.value}" for name, morsel in answer.cookies.items())
         if not cookie:
