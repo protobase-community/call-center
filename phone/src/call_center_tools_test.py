@@ -203,6 +203,31 @@ async def test_a_failed_ticket_after_the_longest_wait_keeps_the_call_in_the_queu
     call = _Call(
         stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "Sorry."]
     )
+
+    async def lost(call_id: int, subject: str, description: str | None) -> dict:
+        raise ConnectionError("The ticket request was lost")
+
+    call.call_center.create_ticket = lost
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        call.queue.end_wait()
+        result = await call.session.run(user_input="A ticket is fine.")
+
+    result.expect.next_event().is_function_call(name="create_ticket")
+    assert result.expect.next_event().is_function_call_output().event().item.is_error
+    assert call.caller.queued
+    status = [r["answer"]["status"] for r in stand_in.requests() if r["path"].endswith("/status")]
+    assert status == ["waiting"]
+
+
+async def test_a_ticket_opened_before_a_failed_queue_exit_still_takes_the_call_out_on_a_retry(
+    stand_in: StandIn,
+):
+    call = _Call(
+        stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "It is open."]
+    )
     await call.start()
     await call.verify()
     assert call.caller.call_id is not None
@@ -214,9 +239,9 @@ async def test_a_failed_ticket_after_the_longest_wait_keeps_the_call_in_the_queu
 
     result.expect.next_event().is_function_call(name="create_ticket")
     assert result.expect.next_event().is_function_call_output().event().item.is_error
-    assert call.caller.queued
+    assert not call.caller.queued
     status = [r["answer"]["status"] for r in stand_in.requests() if r["path"].endswith("/status")]
-    assert status == ["waiting"]
+    assert status == ["waiting", "incoming"]
 
 
 async def test_a_wait_request_that_fails_after_the_call_waits_is_still_undone_by_a_ticket(
