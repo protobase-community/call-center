@@ -5,9 +5,12 @@ description = "The call center's phone side: the AI agent that answers each call
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.14.5",
+    "aiortc>=1.15,<2",
     "livekit-agents[openai]==1.8.8",
+    "numpy>=2.2",
     "python-dotenv>=1.2.4",
     "tzdata>=2025.2",
+    "websockets>=16,<17",
 ]
 
 [dependency-groups]
