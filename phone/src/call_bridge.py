@@ -63,16 +63,22 @@ class CallBridge:
         options = rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE)
         await self._room.local_participant.publish_track(track, options)
         self._background.start("playout", play_mix(self._from_call, source))
-        await client.publish(MixTrack(self._to_call))
-
+        # the call's messages, the answer to the publish too, come in while it runs
         call = asyncio.create_task(client.run())
+        publishing = asyncio.create_task(client.publish(MixTrack(self._to_call)))
         hung_up = asyncio.create_task(self.hung_up.wait())
-        await asyncio.wait([call, hung_up], return_when=asyncio.FIRST_COMPLETED)
-        hung_up.cancel()
-        if call.done():
+        try:
+            await asyncio.wait([call, publishing], return_when=asyncio.FIRST_COMPLETED)
+            if publishing.done():
+                # raises when the call refused the bridge's audio
+                await publishing
+            await asyncio.wait([call, hung_up], return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in (publishing, hung_up, call):
+                task.cancel()
+        if call.done() and not call.cancelled():
             # the call ended for the bridge: CallLeft says why
             await call
-        call.cancel()
 
     async def close(self, client: CallClient | None) -> None:
         self._room.off("track_subscribed", self._on_subscribed)
