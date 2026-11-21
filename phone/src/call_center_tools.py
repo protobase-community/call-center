@@ -55,12 +55,16 @@ def customer_summary_tool(call_center: CallCenter) -> llm.FunctionTool:
 
 async def _leave_queue(call_center: CallCenter, caller: CallerInfo, call_id: int) -> None:
     """Takes the call out of the app's queue, unless a person has answered it meanwhile."""
+    # cleared before the request, so a wait that starts meanwhile keeps the flag it sets
+    caller.queued = False
     try:
         await call_center.leave_queue(call_id)
-    except CallCenterError as error:
-        if error.problem != "call-answered":
-            raise
-    caller.queued = False
+    except BaseException as error:
+        if isinstance(error, CallCenterError) and error.problem == "call-answered":
+            return
+        # the call may still wait, and leaving again is safe
+        caller.queued = True
+        raise
 
 
 def create_ticket_tool(call_center: CallCenter) -> llm.FunctionTool:

@@ -244,6 +244,48 @@ async def test_a_ticket_opened_before_a_failed_queue_exit_still_takes_the_call_o
     assert status == ["waiting", "incoming"]
 
 
+async def test_a_wait_that_starts_while_the_call_leaves_the_queue_keeps_the_call_queued(
+    stand_in: StandIn,
+):
+    call = _Call(stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "Done."])
+    leave_queue = call.call_center.leave_queue
+
+    async def wait_meanwhile(call_id: int) -> None:
+        await leave_queue(call_id)
+        call.caller.queued = True
+
+    call.call_center.leave_queue = wait_meanwhile
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        call.queue.end_wait()
+        await call.session.run(user_input="A ticket is fine.")
+
+    assert call.caller.queued
+
+
+async def test_a_failed_queue_exit_keeps_the_call_queued(stand_in: StandIn):
+    call = _Call(
+        stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "Sorry."]
+    )
+
+    async def lost(call_id: int) -> None:
+        raise ConnectionError("The queue exit was lost")
+
+    call.call_center.leave_queue = lost
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        call.queue.end_wait()
+        result = await call.session.run(user_input="A ticket is fine.")
+
+    result.expect.next_event().is_function_call(name="create_ticket")
+    assert result.expect.next_event().is_function_call_output().event().item.is_error
+    assert call.caller.queued
+
+
 async def test_a_wait_request_that_fails_after_the_call_waits_is_still_undone_by_a_ticket(
     stand_in: StandIn,
 ):
