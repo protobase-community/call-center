@@ -27,7 +27,8 @@ than in this app, belongs in [Protobase's issues](https://github.com/PrototeamHQ
 
 Keep each pull request to one change. A pull request lands as one squashed commit whose subject is its title, so the
 title follows [Conventional Commits](https://www.conventionalcommits.org), such as `feat: filter the orders by status` or
-`fix: the seed's invoice totals`; the commits on its branch need not, and one already pushed is not rewritten for this.
+`fix: the seed's invoice totals`; the commits on its branch, merges of `main` included, need not, and one already
+pushed is not rewritten for this.
 
 ## Licence
 
