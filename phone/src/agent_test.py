@@ -12,6 +12,7 @@ from livekit import rtc
 from livekit.agents import AgentSession
 from livekit.plugins import openai
 
+from bridge_name import BRIDGE_NAME, bridged_call
 from conftest import StandIn
 
 
@@ -36,12 +37,21 @@ def agent(monkeypatch: pytest.MonkeyPatch, stand_in: StandIn) -> ModuleType:
     return importlib.import_module("agent")
 
 
+class _Dispatches:
+    def __init__(self) -> None:
+        self.created: list[Any] = []
+
+    async def create_dispatch(self, request: Any) -> None:
+        self.created.append(request)
+
+
 class _Job:
     """The parts of a JobContext the entrypoint uses before its session starts."""
 
     def __init__(self) -> None:
         self.room = SimpleNamespace(name="call-test")
         self.job = SimpleNamespace(metadata="")
+        self.api = SimpleNamespace(agent_dispatch=_Dispatches())
         self.shutdown_callbacks: list[Any] = []
 
     async def wait_for_participant(self) -> SimpleNamespace:
@@ -130,6 +140,18 @@ async def test_registers_the_call_and_ends_it_on_shutdown(
     assert caller.call_id == requests[0]["answer"]["id"]
     assert requests[1]["path"] == f"/calls/{caller.call_id}/status"
     assert requests[1]["answer"]["status"] == "ended"
+
+
+async def test_sends_the_bridge_to_the_registered_call(
+    agent: ModuleType, monkeypatch: pytest.MonkeyPatch
+):
+    job = _Job()
+    caller = (await _started(agent, monkeypatch, job))["session"].userdata
+
+    [dispatch] = job.api.agent_dispatch.created
+    assert dispatch.agent_name == BRIDGE_NAME
+    assert dispatch.room == "call-test"
+    assert bridged_call(dispatch.metadata) == caller.call_id
 
 
 async def test_starts_the_session_without_typed_turns(

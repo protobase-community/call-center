@@ -16,6 +16,7 @@ from livekit.plugins import openai
 
 from agent_name import AGENT_NAME
 from assistant import Assistant
+from bridge_dispatch import dispatch_bridge
 from call_center import CallCenter
 from call_center_settings import call_center_settings
 from call_ending import CallEnding
@@ -25,6 +26,7 @@ from keypad import listen_to_keypad
 from pin_entry import PinEntry, route_keys
 from queue_settings import queue_settings
 from room_options import room_options
+from staff_presence import StaffPresence, watch_staff
 from tools import session_tools
 
 load_dotenv()
@@ -77,6 +79,8 @@ async def entrypoint(ctx: JobContext) -> None:
     caller.call_id = call_id
     call_ending = CallEnding(lambda: call_center.end_call(call_id))
     ctx.add_shutdown_callback(call_ending.wait)
+    # joins the Protobase call on the record, so staff who join it hear the caller
+    await dispatch_bridge(ctx.api, ctx.room.name, call_id)
 
     session = AgentSession(
         # the model's turn_detection stays unset, which lets the session switch it off for
@@ -94,6 +98,9 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     def to_model(message: str) -> None:
+        # the assistant stays silent while staff have the caller
+        if staff.present:
+            return
         session.generate_reply(user_input=message)
 
     pin_entry = PinEntry(call_center, caller, to_model)
@@ -104,6 +111,12 @@ async def entrypoint(ctx: JobContext) -> None:
         hold_settings.music_file,
         hold_settings.max_wait_minutes,
         session.input.set_audio_enabled,
+        to_model,
+    )
+    staff = StaffPresence(
+        hold_queue.end_wait,
+        session.input.set_audio_enabled,
+        lambda: session.interrupt(force=True),
         to_model,
     )
     # no remote session host: it would let any room participant read the instructions and drive
@@ -121,11 +134,13 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.add_shutdown_callback(player.aclose)
 
     caller.phone_identity = participant.identity
-    keys = route_keys(pin_entry, lambda: hold_queue.waiting, to_model)
+    keys = route_keys(pin_entry, lambda: hold_queue.waiting or staff.present, to_model)
     stop_keypad = listen_to_keypad(ctx.room, participant.identity, keys)
+    stop_staff = watch_staff(ctx.room, staff)
 
     def on_close(_: object) -> None:
         stop_keypad()
+        stop_staff()
         pin_entry.close()
         hold_queue.end_wait()
         call_ending.start()
