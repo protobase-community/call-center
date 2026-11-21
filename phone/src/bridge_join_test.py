@@ -102,3 +102,30 @@ async def test_peer_mode_stops_with_a_clear_error(app: SignInStandIn):
     app.mode = "peer"
     with pytest.raises(PeerModeUnsupported, match="supports only the LiveKit"):
         await join_signed_in(_login(app), _join(app, []))
+
+
+async def test_a_join_the_call_never_answers_times_out(
+    app: SignInStandIn, monkeypatch: pytest.MonkeyPatch
+):
+    import call.call_client as call_client
+
+    monkeypatch.setattr(call_client, "JOIN_TIMEOUT", 0.2)
+    app.mode = "silent"
+    with pytest.raises(call_client.JoinTimedOut):
+        await join_signed_in(_login(app), _join(app, []))
+
+
+async def test_leaving_a_socket_the_server_closed_still_closes_the_rest(app: SignInStandIn):
+    client = await join_signed_in(_login(app), _join(app, []))
+    await app.close_sockets()
+    await client.leave()
+    assert client._socket is not None and client._socket.close_code is not None
+
+
+async def test_the_sign_in_follows_no_redirect(app: SignInStandIn):
+    from phone_line_login import SignInFailed
+
+    app.redirect = True
+    with pytest.raises(SignInFailed):
+        await _login(app).sign_in()
+    assert app.redirected_to == 0

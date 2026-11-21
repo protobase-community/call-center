@@ -1,8 +1,9 @@
 """For the tests: the app's password sign-in and its call socket, as the bridge meets them.
 
 The sign-in takes one email and password and sets a new session cookie, refusing a request that
-carries a cookie or an Origin header; the socket admits only a session not revoked, answers
-`join` with `joined` in the mode given, then sends `members`.
+carries a cookie or an Origin header, or redirects it when `redirect` is set; the socket admits
+only a session not revoked, answers `join` with `joined` in the mode given, then sends `members`,
+or answers nothing in mode `silent`.
 """
 
 import json
@@ -24,6 +25,9 @@ class SignInStandIn:
     sessions: set[str] = field(default_factory=set)
     sign_ins: int = 0
     joins: list[str | None] = field(default_factory=list)
+    redirect: bool = False
+    redirected_to: int = 0
+    sockets: list[web.WebSocketResponse] = field(default_factory=list)
     server: TestServer | None = None
 
     @property
@@ -35,9 +39,14 @@ class SignInStandIn:
     def revoke(self) -> None:
         self.sessions.clear()
 
+    async def close_sockets(self) -> None:
+        for socket in self.sockets:
+            await socket.close()
+
     async def start(self) -> None:
         app = web.Application()
         app.router.add_post("/api/auth/sign-in/email", self._sign_in)
+        app.router.add_post("/elsewhere", self._elsewhere)
         app.router.add_get("/api/functions/phone-call", self._socket)
         self.server = TestServer(app)
         await self.server.start_server()
@@ -46,8 +55,14 @@ class SignInStandIn:
         if self.server is not None:
             await self.server.close()
 
+    async def _elsewhere(self, request: web.Request) -> web.Response:
+        self.redirected_to += 1
+        return web.Response(status=200)
+
     async def _sign_in(self, request: web.Request) -> web.Response:
         self.sign_ins += 1
+        if self.redirect:
+            raise web.HTTPPermanentRedirect("/elsewhere")
         if "Cookie" in request.headers or "Origin" in request.headers:
             return web.Response(status=403)
         body = await request.json()
@@ -66,8 +81,11 @@ class SignInStandIn:
             return web.Response(status=401)
         socket = web.WebSocketResponse()
         await socket.prepare(request)
+        self.sockets.append(socket)
         async for message in socket:
             if message.type != WSMsgType.TEXT or json.loads(message.data)["type"] != "join":
+                continue
+            if self.mode == "silent":
                 continue
             joined = {"type": "joined", "call": "c1", "mode": self.mode, "participant": "p1"}
             await socket.send_json({**joined, "iceServers": []})

@@ -16,7 +16,7 @@ from websockets.exceptions import InvalidStatus
 from bridge_join import JoinRefused, join_signed_in
 from bridge_name import BRIDGE_NAME, bridged_call
 from bridge_settings import bridge_settings
-from call.call_client import CallClient, CallLeft, PeerModeUnsupported
+from call.call_client import CallClient, CallLeft, JoinTimedOut, PeerModeUnsupported
 from call_bridge import CallBridge
 from phone_line_login import PhoneLineLogin, SignInFailed, SignInRefused
 
@@ -57,7 +57,7 @@ async def entrypoint(ctx: JobContext) -> None:
         await bridge.bridge(client)
     except CallLeft as left:
         logger.info("left the app's phone call %s: %s", call_id, left.reason)
-    except (SignInRefused, SignInFailed, JoinRefused, PeerModeUnsupported) as error:
+    except (SignInRefused, SignInFailed, JoinRefused, JoinTimedOut, PeerModeUnsupported) as error:
         # the caller stays with the assistant; only the reason is reported, never a credential
         logger.error("no bridge for phone call %s: %s", call_id, error)
     except InvalidStatus as error:
@@ -67,8 +67,10 @@ async def entrypoint(ctx: JobContext) -> None:
             error.response.status_code,
         )
     finally:
-        await bridge.close(client)
-        ctx.shutdown("the bridge ended")
+        try:
+            await bridge.close(client)
+        finally:
+            ctx.shutdown("the bridge ended")
 
 
 if __name__ == "__main__":

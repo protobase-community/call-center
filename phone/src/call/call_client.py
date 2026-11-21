@@ -10,6 +10,7 @@ audio tracks Protobase lists for it, and hands on who is in the call from each `
 A lost socket is not resumed: the call client ends, and with it the bridge for that call.
 """
 
+import asyncio
 import json
 from collections.abc import Callable
 
@@ -34,6 +35,15 @@ class PeerModeUnsupported(Exception):
             "The call sends media straight between members (peer), but the bridge supports only"
             " the LiveKit media server path (sfu): give the app a LiveKit calls backend"
         )
+
+
+class JoinTimedOut(Exception):
+    def __init__(self) -> None:
+        super().__init__(f"The call did not take the member in within {JOIN_TIMEOUT:.0f} s")
+
+
+# seconds from the open socket to `joined`; the caller is on the line meanwhile
+JOIN_TIMEOUT = 15.0
 
 
 class CallClient:
@@ -64,8 +74,12 @@ class CallClient:
         self._socket = await websockets.connect(self._url, additional_headers=self._headers)
         try:
             await self._send({"type": "join"})
-            while self._link is None:
-                await self._handle(json.loads(await self._socket.recv()))
+            async with asyncio.timeout(JOIN_TIMEOUT):
+                while self._link is None:
+                    await self._handle(json.loads(await self._socket.recv()))
+        except TimeoutError as error:
+            await self._socket.close()
+            raise JoinTimedOut() from error
         except BaseException:
             # a join that failed leaves no socket open
             await self._socket.close()
@@ -89,11 +103,21 @@ class CallClient:
         raise CallLeft({1000: "ended", 1008: "removed"}.get(code or 0, f"socket closed ({code})"))
 
     async def leave(self) -> None:
-        if self._socket is not None and self._socket.close_code is None:
-            await self._send({"type": "leave"})
-            await self._socket.close()
-        if self._link is not None:
-            await self._link.close()
+        """Says so when the socket is still open, then closes the socket and the media."""
+        try:
+            if self._socket is not None and self._socket.close_code is None:
+                try:
+                    await self._send({"type": "leave"})
+                except websockets.ConnectionClosed:
+                    # the server closed it meanwhile: the member is out of the call either way
+                    pass
+        finally:
+            try:
+                if self._socket is not None:
+                    await self._socket.close()
+            finally:
+                if self._link is not None:
+                    await self._link.close()
 
     async def _send(self, message: dict) -> None:
         if self._socket is None:

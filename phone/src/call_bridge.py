@@ -68,14 +68,15 @@ class CallBridge:
         publishing = asyncio.create_task(client.publish(MixTrack(self._to_call)))
         hung_up = asyncio.create_task(self.hung_up.wait())
         try:
-            await asyncio.wait([call, publishing], return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait([call, publishing, hung_up], return_when=asyncio.FIRST_COMPLETED)
             if publishing.done():
                 # raises when the call refused the bridge's audio
                 await publishing
-            await asyncio.wait([call, hung_up], return_when=asyncio.FIRST_COMPLETED)
+                await asyncio.wait([call, hung_up], return_when=asyncio.FIRST_COMPLETED)
         finally:
             for task in (publishing, hung_up, call):
                 task.cancel()
+            await asyncio.wait([publishing, hung_up, call])
         if call.done() and not call.cancelled():
             # the call ended for the bridge: CallLeft says why
             await call
@@ -84,11 +85,13 @@ class CallBridge:
         self._room.off("track_subscribed", self._on_subscribed)
         self._room.off("track_unsubscribed", self._on_unsubscribed)
         self._room.off("participant_disconnected", self._on_disconnected)
-        if client is not None:
-            await client.leave()
-        await self._room_tracks.close()
-        await self._members.close()
-        await self._background.close()
+        try:
+            if client is not None:
+                await client.leave()
+        finally:
+            await self._room_tracks.close()
+            await self._members.close()
+            await self._background.close()
 
     def _on_subscribed(
         self,
