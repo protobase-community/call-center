@@ -25,13 +25,16 @@ def ask_for_person_tool(call_center: CallCenter, queue: HoldQueue) -> llm.Functi
             raise RuntimeError("The queue needs the call's record in the app")
         if queue.waiting:
             raise ToolError("The caller is waiting already")
+        # set first: a request that fails may still have set the call waiting, and leaving the
+        # queue is safe for a call that never waited
+        context.userdata.queued = True
         try:
             await call_center.wait_in_queue(call_id)
         except CallCenterError as error:
             if error.problem == "call-answered":
+                context.userdata.queued = False
                 raise ToolError("A person has answered this call already") from error
             raise
-        context.userdata.queued = True
         await context.wait_for_playout()
         queue.start()
         return ToolResult(tool_result(changed={"call": "waiting"}), reply_required=False)

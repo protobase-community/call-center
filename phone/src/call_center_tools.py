@@ -66,14 +66,15 @@ async def _leave_queue(call_center: CallCenter, caller: CallerInfo, call_id: int
 def create_ticket_tool(call_center: CallCenter) -> llm.FunctionTool:
     async def create_ticket(context: RunContext[CallerInfo], subject: str, description: str) -> str:
         call_id = _verified_call(context.userdata)
-        if context.userdata.queued:
-            await _leave_queue(call_center, context.userdata, call_id)
         try:
             ticket = await call_center.create_ticket(call_id, subject, description)
         except CallCenterError as error:
             if error.problem == "call-has-ticket":
                 raise ToolError("This call has a ticket already; a call is about one") from error
             raise
+        # only once the ticket exists, so a caller whose ticket failed still waits
+        if context.userdata.queued:
+            await _leave_queue(call_center, context.userdata, call_id)
         return tool_result(changed={"ticket": ticket})
 
     return function_tool(create_ticket, description=_CREATE_TICKET)
