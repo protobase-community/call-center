@@ -1,5 +1,7 @@
 -- The calls on records, who is in them, whom they ring, their guests, and the signals between the processes serving the app, written by `protobase migration`.
 -- Applied with the project's other migrations; edit or remove statements the project handles differently.
+-- The calls tables of the Protobase release this app runs on, which `protobase dev` needs before it serves the calls
+-- that the bridge and staff join; the app itself makes no guest links.
 
 alter table "calls"."members" add column if not exists "name" text;
 
