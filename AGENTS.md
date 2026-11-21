@@ -14,7 +14,7 @@ first change adds its first tables and resources.
 ## Never touch
 
 - `auth/` and the `auth` schema: sign-in and accounts.
-- `.github/workflows/`.
+- `.github/workflows/`, unless the task asks for a CI change; that pull request then changes only CI.
 
 ## Scripts
 
