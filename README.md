@@ -57,13 +57,13 @@ bun run db:up                     # Postgres 18 in Docker on port 55432; creates
 bun run db:migrate
 bun run protobase skill install   # gives Claude Code, Codex and other agents the Protobase docs of this version
 bun run protobase users create you@example.com --role admin --generate-password
-bun run calls:up                  # LiveKit in Docker on port 7880, for the calls
 bun run dev                       # http://localhost:5173
 bun run test
 ```
 
-Set your own `PROTOBASE_SECRET` in `.env` (`openssl rand -base64 32`). `bun run db:down` stops the database and
-LiveKit.
+Set your own `PROTOBASE_SECRET` in `.env` (`openssl rand -base64 32`). `bun run db:down` stops the database. The
+calls' media goes through the phone stack's LiveKit server (see below), as the phone line's does: one server for both,
+as in production.
 
 The phone line signs in with an ordinary account of the `phone_line` role and a password, and joins calls with its
 session cookie. Create it with the password on standard input:
@@ -91,27 +91,70 @@ open tickets and opens a new ticket for them; before that, these tools refuse.
 A caller who asks for a person waits in the queue: the agent says it is finding someone, sets the call `waiting`, so
 staff see it among the waiting calls, stops listening and plays hold music in the caller's own room, looped through
 LiveKit Agents' `BackgroundAudioPlayer`. Keys pressed meanwhile are ignored, unless PIN entry is on. The wait ends when
-the caller hangs up or after `MAX_WAIT_MINUTES` (5 when unset): then the music stops and the agent offers to open a
-ticket instead, or puts the caller back in the queue. The music is `phone/hold_music/hold-music.ogg`, self-made and
+a staff member joins the call (see the bridge below), when the caller hangs up, or after `MAX_WAIT_MINUTES` (5 when
+unset): then the music stops and the agent offers to open a ticket instead, or puts the caller back in the queue. The music is `phone/hold_music/hold-music.ogg`, self-made and
 public domain (CC0), see its README; `HOLD_MUSIC_FILE` names another file.
-<gap>A person who joins a waiting call cannot stop the hold music because the phone line does not yet watch for staff joining the room.</gap>
 <gap>A caller who takes a ticket after the longest wait stays waiting in the app because the phone line has no route that takes a call back from the queue.</gap>
+
+### The bridge
+
+Staff and the caller meet through a bridge, the phone package's second process beside the agent. Once the agent has
+registered a call, it sends the bridge to the call's room through LiveKit's agent dispatch. The bridge signs in to the
+app as the `phone_line` account (`PHONE_LINE_EMAIL` and `PHONE_LINE_PASSWORD`, without which it does not start),
+joins the Protobase call on the call's record as member `caller` through the `phone-call` function, and carries the
+audio both ways until the caller hangs up:
+
+```text
+  phone ──SIP──▶ SIP room call-…                               Protobase call on /phone_calls/<id>
+                 ┌───────────────────────────┐                ┌──────────────────────────────┐
+                 │ caller                    │                │                              │
+                 │ assistant                 │── one mix ────▶│ member `caller` (the bridge) │
+                 │ hold music                │                │                              │
+                 │ the bridge's track        │◀──── one mix ──│ staff members ◀──▶ browsers  │
+                 └───────────────────────────┘                └──────────────────────────────┘
+```
+
+Neither side hears itself: the call gets the room without the bridge's own track, and the room gets the staff members
+without what the bridge sends. When a staff member is in the call, the hold music stops and the assistant hears and
+says nothing; when the last one leaves while the caller is still there, the assistant takes over again.
+
+The bridge keeps the session cookie of its password sign-in in memory and joins every call with it, so its sockets
+outlive any token. A join refused with 401, such as after an admin revoked the session, signs in again once; a
+second refusal, or a refused sign-in such as a wrong password, gives up on that call, which stays with the assistant.
+Neither the password nor the cookie goes into a log.
+<gap>The bridge cannot carry a call whose app sends media peer to peer because only the LiveKit media path is implemented.</gap>
+<gap>A bridge whose socket to the app drops cannot rejoin the call because resuming a call session is not implemented in the bridge.</gap>
+
+### Run the phone side locally
 
 `phone/sip/inbound-trunk.json` is for local development only: its password is in this repository. For a real
 trunk, write a trunk file with a long random password outside the repository and name it as `SIP_TRUNK_FILE` in
 `phone/.env`. The setup refuses a trunk without a digest username and password.
 
-Run it locally with [uv](https://docs.astral.sh/uv/) and Docker:
+Run it with [uv](https://docs.astral.sh/uv/) and Docker, beside the app's `bun run dev`. The phone stack's LiveKit
+server carries the app's calls too, so the app's `.env` names its key pair:
 
 ```sh
 cd phone
 uv sync
 cp .env.example .env              # set OPENAI_API_KEY, and LIVEKIT_API_SECRET to `openssl rand -hex 32`
-docker compose up --build         # LiveKit, LiveKit SIP, Redis, the trunk's setup and the agent
+```
+
+- In `phone/.env`, set `CALL_CENTER_URL=http://localhost:5173/api/functions/phone-line`, `CALL_CENTER_SECRET` to a
+  new `whsec_` secret, and `PHONE_LINE_EMAIL` and `PHONE_LINE_PASSWORD` to the phone line's account.
+- In the app's `.env`, set `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` to the pair in `phone/.env`, and
+  `PHONE_LINE_SECRET` to the same `whsec_` secret, then restart `bun run dev`.
+
+```sh
+docker compose up --build         # LiveKit, LiveKit SIP, Redis, the trunk's setup, the agent and the bridge
 tests/sip_call/run.sh             # SIPp calls: two refused, one the agent must greet and answer, one with a PIN,
                                   # one that asks for a person
+tests/bridge_call/run.sh          # SIPp callers and a staff member in Chromium, through the app
 uv run pytest && uv run pyright && uv run ruff check src tests
 ```
+
+The agent and the bridge run on the host's network, so the app on port 5173 is on their loopback and the agent's
+plain http rule holds; they listen on loopback only. With Docker Desktop, turn on its host networking.
 
 The SIPp calls cost a few cents of model use. The first saves what the caller heard as
 `phone/sip-call-out/agent.wav`. The second keys a wrong, then the right PIN and asks for a ticket, against a stand-in
@@ -119,10 +162,18 @@ of the app's phone line that checks signatures as the app does and logs what it 
 `phone/sip-call-out/phone-line.jsonl`; `run.sh` points the agent at it with a secret of its own. The third asks for
 a person and must hear the hold music without a pause from 12 to 27 seconds after its request, and see the stand-in set
 the call `waiting`; the agent's side is in `phone/sip-call-out/person-agent.wav`.
-Every published port listens on 127.0.0.1 only, and LiveKit runs on the key pair from `.env`, never in dev mode.
-It publishes the same LiveKit ports as `bun run calls:up`, so run `bun run db:down` first.
 
-<gap>The local phone stack cannot call an app run with `bun run dev` because the agent takes plain http only on its own machine and a local https route to the app is not implemented.</gap>
+`tests/bridge_call/run.sh` goes through the app itself: it starts `bun run dev` on the database of the app's `.env`,
+with accounts and a phone line secret of its own, and the phone stack against it. A caller waits on hold until a staff
+member joins in Chromium through `@protobase/client/calls`, then each says a line, recorded on both sides: each side
+must hear the other's line and not its own, and neither the music nor the assistant. A second caller's staff member
+joins while the assistant talks, after an admin revoked the phone line's session, and leaves again, after which the
+assistant must speak. A third call runs the bridge on a wrong password: it must give up after one sign-in. Its
+output goes to `/tmp/call-center-bridge-call`, outside the project, since `bun run dev` restarts the calls' sockets on
+any change in it.
+
+Every published port listens on 127.0.0.1 only, and LiveKit runs on the key pair from `.env`, never in dev mode.
+
 <gap>A provider that delivers calls only to a registered phone cannot reach the agent because a SIP registration bridge is not implemented.</gap>
 
 ## Use it as a template
