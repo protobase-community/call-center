@@ -30,16 +30,17 @@ class AudioMix:
         if buffer is None:
             return
         buffer += pcm
-        excess = len(buffer) - MAX_BUFFERED_FRAMES * FRAME_BYTES
+        # whole samples only, so the buffer stays aligned
+        excess = (len(buffer) - MAX_BUFFERED_FRAMES * FRAME_BYTES) // 2 * 2
         if excess > 0:
             del buffer[:excess]
 
     def next_frame(self) -> bytes:
         mixed = np.zeros(FRAME_SAMPLES, dtype=np.int32)
         for buffer in self._buffers.values():
-            take = bytes(buffer[:FRAME_BYTES])
-            del buffer[:FRAME_BYTES]
-            # an odd byte left by a short push waits for the next one
-            take = take[: len(take) // 2 * 2]
-            mixed[: len(take) // 2] += np.frombuffer(take, dtype=np.int16)
+            # whole samples only: an odd byte left by a short push waits for the next one
+            size = min(len(buffer), FRAME_BYTES) // 2 * 2
+            take = bytes(buffer[:size])
+            del buffer[:size]
+            mixed[: size // 2] += np.frombuffer(take, dtype=np.int16)
         return np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()

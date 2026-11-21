@@ -47,3 +47,23 @@ def test_a_removed_or_unknown_source_is_not_heard():
     mix.push("caller", _pcm(5))
     mix.push("stranger", _pcm(5))
     assert mix.next_frame() == bytes(FRAME_BYTES)
+
+
+def test_an_odd_byte_waits_for_the_rest_of_its_sample():
+    mix = AudioMix()
+    mix.add("caller")
+    sample = _pcm(0x0201)
+    mix.push("caller", sample[:1])
+    assert mix.next_frame() == bytes(FRAME_BYTES)
+    mix.push("caller", sample[1:])
+    assert _samples(mix.next_frame())[0] == 0x0201
+
+
+def test_dropping_old_audio_keeps_samples_whole():
+    mix = AudioMix()
+    mix.add("caller")
+    audio = _pcm(*[0x0701] * (MAX_BUFFERED_FRAMES * FRAME_SAMPLES + 3))
+    # an odd split, so the oldest audio is dropped while a sample is half there
+    mix.push("caller", audio[:-1])
+    mix.push("caller", audio[-1:])
+    assert set(_samples(mix.next_frame())) == {0x0701}
