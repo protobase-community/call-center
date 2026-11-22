@@ -38,20 +38,32 @@ class HoldQueue:
         self._report = report
         self._music: Playing | None = None
         self._timer: asyncio.TimerHandle | None = None
+        # staff in the call: no wait starts, even one a tool asked for before they came
+        self._staff = False
 
     @property
     def waiting(self) -> bool:
         return self._music is not None
 
-    def start(self) -> None:
-        """Stops the assistant listening and plays the music until the wait ends."""
+    def staff_in(self, present: bool) -> None:
+        """Staff joined, which ends any wait and holds off new ones, or the last one left."""
+        self._staff = present
+        if present:
+            self.end_wait()
+
+    def start(self) -> bool:
+        """Stops the assistant listening and plays the music until the wait ends; does nothing
+        and answers False while staff are in the call."""
         if self.waiting:
             raise RuntimeError("The caller is waiting already")
+        if self._staff:
+            return False
         self._listen(False)
         self._music = self._player.play(self._music_file, loop=True)
         self._timer = asyncio.get_running_loop().call_later(
             self._max_wait_minutes * 60, self._waited_longest
         )
+        return True
 
     def end_wait(self) -> None:
         """Stops the music and the longest wait's timer; the assistant stays silent."""

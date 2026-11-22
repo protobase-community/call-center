@@ -76,3 +76,18 @@ async def test_refuses_a_second_start_while_waiting():
     with pytest.raises(RuntimeError, match="waiting already"):
         q.queue.start()
     q.queue.end_wait()
+
+
+async def test_staff_end_a_wait_and_hold_off_new_ones_until_they_leave():
+    q = _Queue()
+    q.queue.start()
+    q.queue.staff_in(True)
+
+    assert not q.queue.waiting
+    assert q.player.played[0].stopped
+    assert q.queue.start() is False
+    assert len(q.player.played) == 1
+
+    q.queue.staff_in(False)
+    assert q.queue.start() is True
+    q.queue.end_wait()

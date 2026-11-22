@@ -23,6 +23,9 @@ the person verifies them. If no one has answered after the longest wait, a messa
 {"queue": {"waited_minutes": 5}} arrives: the music has stopped and you hear the caller again. Say
 no one is free yet and offer to open a ticket instead, and call ask_for_person again if they would
 rather keep waiting.
+A person of the support team may join the call; you hear nothing while they are in it. When the
+last one leaves, a message {"staff": "left"} arrives: you hear the caller again. Ask whether there
+is anything else you can help with.
 Keys the caller presses outside verification arrive as a message such as {"keypad": "42"}; a
 sequence ends at the pound key or after a short pause."""
 

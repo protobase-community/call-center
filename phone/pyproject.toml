@@ -5,9 +5,12 @@ description = "The call center's phone side: the AI agent that answers each call
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.14.5",
+    "aiortc>=1.15,<2",
     "livekit-agents[openai]==1.8.8",
+    "numpy>=2.2",
     "python-dotenv>=1.2.4",
     "tzdata>=2025.2",
+    "websockets>=16,<17",
 ]
 
 [dependency-groups]
@@ -19,20 +22,20 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "tests/sip_call"]
+pythonpath = ["src", "tests/sip_call", "tests/bridge_call"]
 testpaths = ["src", "tests"]
 python_files = ["*_test.py"]
 asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests/sip_call"]
+src = ["src", "tests/sip_call", "tests/bridge_call"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.pyright]
 include = ["src", "tests"]
-extraPaths = ["src", "tests/sip_call"]
+extraPaths = ["src", "tests/sip_call", "tests/bridge_call"]
 venvPath = "."
 venv = ".venv"

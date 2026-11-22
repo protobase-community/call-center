@@ -26,7 +26,7 @@ class CallCenterSettings:
 
 
 def call_center_settings(environ: Mapping[str, str]) -> CallCenterSettings:
-    return CallCenterSettings(url=_url(environ), key=_key(environ))
+    return CallCenterSettings(url=call_center_url(environ), key=_key(environ))
 
 
 def _required(environ: Mapping[str, str], variable: str, what: str) -> str:
@@ -36,7 +36,7 @@ def _required(environ: Mapping[str, str], variable: str, what: str) -> str:
     return value
 
 
-def _url(environ: Mapping[str, str]) -> str:
+def call_center_url(environ: Mapping[str, str]) -> str:
     text = _required(environ, URL_VARIABLE, "the URL of the app's phone-line function")
     try:
         parts = urlsplit(text)
