@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  # A labelled pull request merges once CodeRabbit approves its head and its checks are green.
+  auto_approvals:
+    enabled: true
+  auto_review:
+    # Review again after each push, so a fix push gets a fresh verdict.
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 0
