@@ -1,4 +1,4 @@
-# Merges a pull request with the auto-merge-approvals label once it is approved after the label was added, by CodeRabbit
+# Merges a pull request with the auto-merge-approvals label once it is approved, by CodeRabbit
 # or by anyone with write access, and every check on its head passed. The shared workflow holds the rules:
 # https://github.com/protobase-community/.github/blob/main/.github/workflows/auto-merge-approvals.yml
 # A merge with GITHUB_TOKEN starts no workflow, so it then starts ci.yml phone.yml on the default branch.
@@ -6,7 +6,7 @@ name: auto-merge-approvals
 
 on:
   pull_request_target: # zizmor: ignore[dangerous-triggers] nothing from the pull request runs
-    types: [ready_for_review, unlabeled]
+    types: [labeled, ready_for_review, unlabeled]
   pull_request_review:
     types: [submitted, dismissed]
   # This repository's CI workflows, by name. Never list auto-merge-approvals itself.
