@@ -22,7 +22,7 @@ this call has no tries left. Never say whether a customer number exists."""
 _CUSTOMER_SUMMARY = """Get the verified caller's name and their tickets not solved yet."""
 
 _CREATE_TICKET = """Open a ticket for the verified caller about what they need help with; a call is
-about one ticket.
+about one ticket. A caller still in the queue for a person leaves it.
 subject: a short line that names the problem, in the caller's language.
 description: what the caller told you about it, in a few sentences."""
 
@@ -53,6 +53,20 @@ def customer_summary_tool(call_center: CallCenter) -> llm.FunctionTool:
     return function_tool(customer_summary, description=_CUSTOMER_SUMMARY)
 
 
+async def _leave_queue(call_center: CallCenter, caller: CallerInfo, call_id: int) -> None:
+    """Takes the call out of the app's queue, unless a person has answered it meanwhile."""
+    # cleared before the request, so a wait that starts meanwhile keeps the flag it sets
+    caller.queued = False
+    try:
+        await call_center.leave_queue(call_id)
+    except BaseException as error:
+        if isinstance(error, CallCenterError) and error.problem == "call-answered":
+            return
+        # the call may still wait, and leaving again is safe
+        caller.queued = True
+        raise
+
+
 def create_ticket_tool(call_center: CallCenter) -> llm.FunctionTool:
     async def create_ticket(context: RunContext[CallerInfo], subject: str, description: str) -> str:
         call_id = _verified_call(context.userdata)
@@ -60,8 +74,15 @@ def create_ticket_tool(call_center: CallCenter) -> llm.FunctionTool:
             ticket = await call_center.create_ticket(call_id, subject, description)
         except CallCenterError as error:
             if error.problem == "call-has-ticket":
+                # the ticket exists, so the caller leaves the queue, as when an earlier try opened
+                # it but could not leave
+                if context.userdata.queued:
+                    await _leave_queue(call_center, context.userdata, call_id)
                 raise ToolError("This call has a ticket already; a call is about one") from error
             raise
+        # only once the ticket exists, so a caller whose ticket failed still waits
+        if context.userdata.queued:
+            await _leave_queue(call_center, context.userdata, call_id)
         return tool_result(changed={"ticket": ticket})
 
     return function_tool(create_ticket, description=_CREATE_TICKET)

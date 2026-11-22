@@ -4,7 +4,8 @@ import { invalidField } from '../_shared/read-body'
 import { boundedText, optionalText } from './body'
 import { callEnded } from './call-of'
 
-// A phone call as the line reports it: created incoming when the call comes in, then waiting in the queue, then ended.
+// A phone call as the line reports it: created incoming when the call comes in, then waiting in the queue, back to
+// incoming when the caller leaves the queue, then ended.
 // Staff joining makes it active (functions/phone-call.ts), never the line.
 
 const answered = ['id', 'room_name', 'caller_number', 'status', 'started_at', 'waiting_since', 'ended_at'] as const
@@ -26,25 +27,31 @@ export const createCall = async (db: Kysely<any>, body: Record<string, unknown>)
 }
 
 /**
- * POST /calls/<id>/status { status }: `waiting` once the caller is in the queue, from incoming; `ended` once the call is
- * over, from any status. Each is idempotent and keeps the time it first happened. An ended call changes no more (409).
+ * POST /calls/<id>/status { status }: `waiting` once the caller is in the queue, from incoming; `incoming` once the
+ * caller leaves the queue, from waiting, which clears the time they started waiting; `ended` once the call is over,
+ * from any status. Each is idempotent; waiting and ended keep the time they first happened. An ended call changes no
+ * more (409).
  */
 export const setCallStatus = async (db: Kysely<any>, key: number, body: Record<string, unknown>) => {
   const status = body.status
-  if (status !== 'waiting' && status !== 'ended') throw invalidField('status', 'Give waiting or ended')
+  if (status !== 'waiting' && status !== 'incoming' && status !== 'ended') {
+    throw invalidField('status', 'Give waiting, incoming or ended')
+  }
 
-  const update =
-    status === 'waiting'
-      ? db
-          .updateTable('public.phone_calls')
-          .set({ status, waiting_since: sql`coalesce(waiting_since, now())` })
-          .where('status', 'in', ['incoming', 'waiting'])
-      : db.updateTable('public.phone_calls').set({ status, ended_at: sql`coalesce(ended_at, now())` })
-  const call = await update.where('id', '=', key).returning(answered).executeTakeFirst()
+  const call = await statusUpdate(db, status).where('id', '=', key).returning(answered).executeTakeFirst()
   if (call) return Response.json(call)
 
   const current = await db.selectFrom('public.phone_calls').select('status').where('id', '=', key).executeTakeFirst()
   if (!current) throw notFound(`There is no phone call ${key}`)
   if (current.status === 'ended') throw callEnded(key)
-  throw new HttpProblem(409, 'call-answered', 'Conflict', `Phone call ${key} is ${current.status}: only an incoming call starts waiting`)
+  throw new HttpProblem(409, 'call-answered', 'Conflict', `Phone call ${key} is ${current.status}: a person has answered it`)
+}
+
+const statusUpdate = (db: Kysely<any>, status: 'waiting' | 'incoming' | 'ended') => {
+  const calls = db.updateTable('public.phone_calls')
+  if (status === 'waiting') {
+    return calls.set({ status, waiting_since: sql`coalesce(waiting_since, now())` }).where('status', 'in', ['incoming', 'waiting'])
+  }
+  if (status === 'incoming') return calls.set({ status, waiting_since: null }).where('status', 'in', ['incoming', 'waiting'])
+  return calls.set({ status, ended_at: sql`coalesce(ended_at, now())` })
 }

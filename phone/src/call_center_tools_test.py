@@ -44,6 +44,11 @@ class _Call:
     def to_model(self, message: str) -> None:
         self.replies.append(self.session.generate_reply(user_input=message))
 
+    async def verify(self) -> None:
+        assert self.caller.call_id is not None
+        await self.call_center.verify(self.caller.call_id, CUSTOMER_NUMBER, PIN)
+        self.caller.verified = True
+
     async def start(self) -> None:
         self.caller.call_id = await self.call_center.register_call("call-1", None)
         tools = session_tools(self.call_center, self.pin_entry, self.queue)
@@ -174,3 +179,150 @@ async def test_asks_for_no_person_twice_while_waiting(stand_in: StandIn):
     result.expect.next_event().is_function_call(name="ask_for_person")
     assert result.expect.next_event().is_function_call_output().event().item.is_error
     assert len(call.player.played) == 1
+
+
+async def test_a_ticket_after_the_longest_wait_takes_the_call_out_of_the_queue(stand_in: StandIn):
+    call = _Call(stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "Done."])
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        call.queue.end_wait()
+        result = await call.session.run(user_input="A ticket is fine.")
+
+    result.expect.next_event().is_function_call(name="create_ticket")
+    assert _output(result)["changed"]["ticket"]["subject"] == TICKET["subject"]
+    assert not call.caller.queued
+    status = [r["answer"]["status"] for r in stand_in.requests() if r["path"].endswith("/status")]
+    assert status == ["waiting", "incoming"]
+
+
+async def test_a_failed_ticket_after_the_longest_wait_keeps_the_call_in_the_queue(
+    stand_in: StandIn,
+):
+    call = _Call(
+        stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "Sorry."]
+    )
+
+    async def lost(call_id: int, subject: str, description: str | None) -> dict:
+        raise ConnectionError("The ticket request was lost")
+
+    call.call_center.create_ticket = lost
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        call.queue.end_wait()
+        result = await call.session.run(user_input="A ticket is fine.")
+
+    result.expect.next_event().is_function_call(name="create_ticket")
+    assert result.expect.next_event().is_function_call_output().event().item.is_error
+    assert call.caller.queued
+    status = [r["answer"]["status"] for r in stand_in.requests() if r["path"].endswith("/status")]
+    assert status == ["waiting"]
+
+
+async def test_a_ticket_opened_before_a_failed_queue_exit_still_takes_the_call_out_on_a_retry(
+    stand_in: StandIn,
+):
+    call = _Call(
+        stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "It is open."]
+    )
+    await call.start()
+    await call.verify()
+    assert call.caller.call_id is not None
+    await call.call_center.create_ticket(call.caller.call_id, "Earlier", "An earlier ticket.")
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        call.queue.end_wait()
+        result = await call.session.run(user_input="A ticket is fine.")
+
+    result.expect.next_event().is_function_call(name="create_ticket")
+    assert result.expect.next_event().is_function_call_output().event().item.is_error
+    assert not call.caller.queued
+    status = [r["answer"]["status"] for r in stand_in.requests() if r["path"].endswith("/status")]
+    assert status == ["waiting", "incoming"]
+
+
+async def test_a_wait_that_starts_while_the_call_leaves_the_queue_keeps_the_call_queued(
+    stand_in: StandIn,
+):
+    call = _Call(stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "Done."])
+    leave_queue = call.call_center.leave_queue
+
+    async def wait_meanwhile(call_id: int) -> None:
+        await leave_queue(call_id)
+        call.caller.queued = True
+
+    call.call_center.leave_queue = wait_meanwhile
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        call.queue.end_wait()
+        await call.session.run(user_input="A ticket is fine.")
+
+    assert call.caller.queued
+
+
+async def test_a_failed_queue_exit_keeps_the_call_queued(stand_in: StandIn):
+    call = _Call(
+        stand_in, [ToolCall("ask_for_person"), ToolCall("create_ticket", TICKET), "Sorry."]
+    )
+
+    async def lost(call_id: int) -> None:
+        raise ConnectionError("The queue exit was lost")
+
+    call.call_center.leave_queue = lost
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        call.queue.end_wait()
+        result = await call.session.run(user_input="A ticket is fine.")
+
+    result.expect.next_event().is_function_call(name="create_ticket")
+    assert result.expect.next_event().is_function_call_output().event().item.is_error
+    assert call.caller.queued
+
+
+async def test_a_wait_request_that_fails_after_the_call_waits_is_still_undone_by_a_ticket(
+    stand_in: StandIn,
+):
+    replies: list[Reply] = [
+        ToolCall("ask_for_person"),
+        "No one is free.",
+        ToolCall("create_ticket", TICKET),
+        "Done.",
+    ]
+    call = _Call(stand_in, replies)
+    wait_in_queue = call.call_center.wait_in_queue
+
+    async def answer_lost(call_id: int) -> None:
+        await wait_in_queue(call_id)
+        raise ConnectionError("The answer was lost")
+
+    call.call_center.wait_in_queue = answer_lost
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Can I talk to a person?")
+        queued = call.caller.queued
+        result = await call.session.run(user_input="A ticket is fine.")
+
+    assert queued
+    result.expect.next_event().is_function_call(name="create_ticket")
+    assert _output(result)["changed"]["ticket"]["subject"] == TICKET["subject"]
+    assert not call.caller.queued
+    status = [r["answer"]["status"] for r in stand_in.requests() if r["path"].endswith("/status")]
+    assert status == ["waiting", "incoming"]
+
+
+async def test_a_ticket_without_a_wait_leaves_the_call_as_it_is(stand_in: StandIn):
+    call = _Call(stand_in, [ToolCall("create_ticket", TICKET), "Done."])
+    await call.start()
+    await call.verify()
+    async with call.session:
+        await call.session.run(user_input="Open a ticket.")
+
+    assert not [r for r in stand_in.requests() if r["path"].endswith("/status")]
